@@ -269,7 +269,7 @@ const homepageHTML = `
                 postsContainer.className = 'posts';
                 postsContainer.innerHTML = posts.map(post => \`
                     <div class="post">
-                        \${post.featured_image_url ? \`<img src="\${post.featured_image_url}" alt="\${post.featured_image_alt || post.title}" class="post-image">\` : ''}
+                        \${post.featured_image_url ? '<img src="' + post.featured_image_url + '" alt="' + (post.featured_image_alt || post.title) + '" class="post-image">' : ''}
                         <h2><a href="/post/\${post.slug}">\${post.title}</a></h2>
                         <div class="post-meta">
                             Published: \${new Date(post.created_at).toLocaleDateString()}
