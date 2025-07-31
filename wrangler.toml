@@ -16,9 +16,12 @@ database_id = "2e3d3aea-1cfc-4f4a-a821-2eb7a01ce65e"
 
 [vars]
 ENVIRONMENT = "development"
+ADMIN_PASSWORD = "admin123"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+ADMIN_PASSWORD = "admin123"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+ADMIN_PASSWORD = "admin123"

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - jonsson.io</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <!-- EditorJS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/quote@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/image@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/embed@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/raw@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/delimiter@latest"></script>
+</head>
+<body>
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Admin Login</h2>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" required>
+                </div>
+                <div id="login-error" class="error-message"></div>
+                <button type="submit" class="btn btn-primary">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Interface -->
+    <div id="admin-interface" class="admin-container">
+        <header class="admin-header">
+            <h1>jonsson.io Admin</h1>
+            <div class="admin-actions">
+                <button id="logout-btn" class="btn btn-outline">Logout</button>
+            </div>
+        </header>
+
+        <nav id="admin-navigation" class="admin-nav">
+            <div class="nav-item" data-section="posts">
+                <button id="posts-nav-btn" class="btn btn-primary">Posts</button>
+            </div>
+            <div class="nav-item" data-section="gallery">
+                <button id="gallery-nav-btn" class="btn btn-outline">Gallery</button>
+            </div>
+            <div class="nav-item" data-section="about">
+                <button id="about-nav-btn" class="btn btn-outline">About</button>
+            </div>
+            <div class="nav-item" data-section="themes">
+                <button id="themes-nav-btn" class="btn btn-outline">Themes</button>
+            </div>
+            <div class="nav-item" data-section="images">
+                <button id="images-nav-btn" class="btn btn-outline">Images</button>
+            </div>
+            <div class="nav-item" data-section="social">
+                <button id="social-nav-btn" class="btn btn-outline">Social</button>
+            </div>
+            <div class="nav-item" data-section="bucket">
+                <button id="bucket-nav-btn" class="btn btn-outline">S3 Import</button>
+            </div>
+        </nav>
+
+        <main class="admin-main">
+            <!-- Posts Section -->
+            <section id="posts-section" class="admin-section active">
+                <div class="section-header">
+                    <h2>Posts</h2>
+                    <div class="section-actions">
+                        <input type="text" id="posts-search" placeholder="Search posts..." class="search-input">
+                        <button id="new-post-btn" class="btn btn-primary">New Post</button>
+                    </div>
+                </div>
+                <div id="posts-list" class="posts-list">
+                    <div class="loading">Loading posts...</div>
+                </div>
+            </section>
+
+            <!-- Editor Section -->
+            <section id="editor-section" class="admin-section">
+                <div class="section-header">
+                    <h2 id="editor-title">New Post</h2>
+                    <div class="section-actions">
+                        <button id="cancel-edit-btn" class="btn btn-outline">Cancel</button>
+                        <button id="save-post-btn" class="btn btn-primary">Save Post</button>
+                    </div>
+                </div>
+                
+                <form id="post-form" class="post-form">
+                    <div class="form-group">
+                        <label for="post-title">Title:</label>
+                        <input type="text" id="post-title" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="post-slug">Slug:</label>
+                        <div class="slug-controls">
+                            <input type="text" id="post-slug" readonly>
+                            <button type="button" id="edit-slug-btn" class="btn btn-small btn-outline">Edit</button>
+                            <button type="button" id="regenerate-slug-btn" class="btn btn-small btn-outline" style="display: none;">Regenerate</button>
+                            <button type="button" id="cancel-slug-btn" class="btn btn-small btn-outline" style="display: none;">Cancel</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Content:</label>
+                        <div id="post-content" class="editor-container"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="featured-image">Featured Image:</label>
+                        <div class="featured-image-section">
+                            <div id="featured-image-preview" class="featured-image-preview">
+                                <div class="featured-image-placeholder">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="image-actions">
+                                <button type="button" id="select-featured-btn" class="btn btn-outline">Select Image</button>
+                                <button type="button" id="remove-featured-btn" class="btn btn-outline" style="display: none;">Remove</button>
+                                <input type="hidden" id="featured-image-id">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="post-published">
+                            Published
+                        </label>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Other sections would be added here -->
+            
+        </main>
+    </div>
+
+    <!-- File Manager Modal -->
+    <div id="file-manager-modal" class="modal large-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="file-manager-title">Browse Image Library</h2>
+                <button id="file-manager-close" class="modal-close">&times;</button>
+            </div>
+            
+            <div class="file-manager-toolbar">
+                <div class="mode-buttons">
+                    <button id="select-mode-btn" class="btn btn-primary">Select</button>
+                    <button id="manage-mode-btn" class="btn btn-secondary">Manage</button>
+                </div>
+                <div class="file-manager-stats">
+                    <span id="selected-count">0 selected</span>
+                </div>
+            </div>
+            
+            <div id="file-manager-grid" class="file-manager-grid">
+                <div class="loading">Loading images...</div>
+            </div>
+            
+            <div class="modal-footer">
+                <button id="cancel-file-manager-btn" class="btn btn-outline">Cancel</button>
+                <button id="select-images-btn" class="btn btn-primary" style="display: none;">Select Images</button>
+                <button id="delete-selected-btn" class="btn btn-danger" style="display: none;">Delete Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>
