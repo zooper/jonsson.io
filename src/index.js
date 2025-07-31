@@ -677,6 +677,96 @@ export default {
         }
       }
       
+      // Admin: Get current theme
+      if (pathname === '/api/admin/theme' && request.method === 'GET') {
+        const session = await isAuthenticated(request);
+        if (!session) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        try {
+          const { results } = await env.DB.prepare(`
+            SELECT setting_value FROM site_settings WHERE setting_key = ?
+          `).bind('theme').all();
+          
+          const currentTheme = results.length > 0 ? results[0].setting_value : 'default';
+          
+          return new Response(JSON.stringify({ theme: currentTheme }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          console.error('Error loading theme:', error);
+          return new Response(JSON.stringify({ theme: 'default' }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+      
+      // Admin: Update theme
+      if (pathname === '/api/admin/theme' && request.method === 'PUT') {
+        const session = await isAuthenticated(request);
+        if (!session) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        try {
+          const body = await request.json();
+          const { theme } = body;
+          
+          if (!theme) {
+            return new Response(JSON.stringify({ error: 'Theme is required' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          
+          // Validate theme
+          const validThemes = ['default', 'classic', 'dark', 'ocean', 'forest', 'sunset', 'monochrome', 'solarized-light', 'solarized-dark', 'leica'];
+          if (!validThemes.includes(theme)) {
+            return new Response(JSON.stringify({ error: 'Invalid theme' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          
+          // Check if theme setting exists
+          const { results: existing } = await env.DB.prepare(`
+            SELECT * FROM site_settings WHERE setting_key = ?
+          `).bind('theme').all();
+          
+          if (existing.length > 0) {
+            // Update existing theme
+            await env.DB.prepare(`
+              UPDATE site_settings 
+              SET setting_value = ?, updated_at = ?
+              WHERE setting_key = ?
+            `).bind(theme, new Date().toISOString(), 'theme').run();
+          } else {
+            // Create new theme setting
+            await env.DB.prepare(`
+              INSERT INTO site_settings (setting_key, setting_value, updated_at)
+              VALUES (?, ?, ?)
+            `).bind('theme', theme, new Date().toISOString()).run();
+          }
+          
+          return new Response(JSON.stringify({ success: true, theme }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          console.error('Error saving theme:', error);
+          return new Response(JSON.stringify({ error: 'Failed to save theme' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+      
       // Serve individual post pages
       if (pathname.startsWith('/post/')) {
         const postHTML = STATIC_FILES['/post.html'];
