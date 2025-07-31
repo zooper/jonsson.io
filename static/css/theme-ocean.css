@@ -1,0 +1,30 @@
+/* Ocean Theme - Calming Blues */
+:root {
+  /* Background Colors */
+  --color-bg: #e8f4f8;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #b3e5fc;
+  
+  /* Text Colors */
+  --color-text: #0d47a1;
+  --color-text-secondary: #1565c0;
+  --color-text-muted: #42a5f5;
+  
+  /* Accent Colors */
+  --color-accent: #0077be;
+  --color-accent-light: #29b6f6;
+  --color-accent-dark: #006494;
+  
+  /* Border Colors */
+  --color-border: #81d4fa;
+  --color-border-light: #b3e5fc;
+  
+  /* Component Colors */
+  --color-navbar-bg: rgba(232, 244, 248, 0.95);
+  --color-card-bg: #ffffff;
+  --color-overlay: rgba(13, 71, 161, 0.8);
+  
+  /* Shadows */
+  --shadow: 0 4px 12px rgba(0, 119, 190, 0.2);
+  --shadow-hover: 0 8px 25px rgba(0, 119, 190, 0.3);
+}

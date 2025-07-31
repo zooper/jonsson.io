@@ -1,0 +1,26 @@
+name = "jonsson-photoblog"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "jonsson-photoblog-prod"
+
+[env.staging]
+name = "jonsson-photoblog-staging"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "your_kv_namespace_id_here"
+
+[[env.staging.kv_namespaces]]
+binding = "CACHE"
+id = "your_staging_kv_namespace_id_here"
+
+[vars]
+ENVIRONMENT = "development"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"

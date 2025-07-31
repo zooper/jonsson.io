@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jonsson.io - Visual Stories</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <script src="/static/js/theme-loader.js"></script>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1 class="hero-title">
+                    <span class="title-main">Visual</span>
+                    <span class="title-accent">Stories</span>
+                </h1>
+                <p class="hero-subtitle">Capturing life through the lens</p>
+                <div class="hero-nav">
+                    <button class="nav-btn active" data-section="gallery">Gallery</button>
+                    <button class="nav-btn" data-section="stories">Stories</button>
+                    <button class="nav-btn" data-section="about">About</button>
+                </div>
+            </div>
+            <div class="hero-social">
+                <a href="https://instagram.com/jonsson" target="_blank" class="social-link">
+                    <span>Instagram</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/>
+                    </svg>
+                </a>
+                <a href="mailto:hello@jonsson.io" class="social-link">
+                    <span>Email</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.89 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Gallery Section -->
+        <section id="gallery" class="content-section active">
+            <div class="section-header">
+                <h2>Recent Work</h2>
+            </div>
+            
+            <div class="gallery-container">
+                <div class="gallery masonry" id="photo-gallery">
+                    <div class="gallery-loading">
+                        <div class="loading-animation">
+                            <div class="loading-dot"></div>
+                            <div class="loading-dot"></div>
+                            <div class="loading-dot"></div>
+                        </div>
+                        <p>Loading visual stories...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stories Section -->
+        <section id="stories" class="content-section">
+            <div class="section-header">
+                <h2>Stories</h2>
+                <p class="section-subtitle">Behind the lens narratives</p>
+            </div>
+            
+            <div class="stories-container" id="stories-list">
+                <div class="gallery-loading">
+                    <div class="loading-animation">
+                        <div class="loading-dot"></div>
+                        <div class="loading-dot"></div>
+                        <div class="loading-dot"></div>
+                    </div>
+                    <p>Loading stories...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="content-section">
+            <div class="about-container">
+                <div class="about-text">
+                    <h2>About</h2>
+                    <div class="about-content">
+                        <p class="lead">I'm a photographer passionate about capturing authentic moments and telling visual stories through my lens.</p>
+                        
+                        <p>My work focuses on the intersection of light, emotion, and time – freezing fleeting moments that might otherwise be forgotten. Each photograph is an invitation to see the world through my eyes, to discover beauty in the ordinary and extraordinary alike.</p>
+                        
+                        <p>Based between urban landscapes and natural environments, I find inspiration in the contrast between human-made and organic forms, always seeking to capture the essence of a moment rather than just its appearance.</p>
+                        
+                        <div class="about-stats">
+                            <div class="stat">
+                                <span class="stat-number" id="photo-count">0</span>
+                                <span class="stat-label">Photos</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-number" id="story-count">0</span>
+                                <span class="stat-label">Stories</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-number">2024</span>
+                                <span class="stat-label">Since</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="about-image">
+                    <div class="image-placeholder">
+                        <svg width="120" height="120" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 2l3 3h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h3zm3 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                        </svg>
+                        <p>Your portrait here</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox">
+        <div class="lightbox-content">
+            <button class="lightbox-close">&times;</button>
+            <div class="lightbox-image-container">
+                <img class="lightbox-image" alt="">
+                <div class="lightbox-camera-overlay" id="lightbox-camera-overlay">
+                    <div class="camera-info">
+                        <span class="camera-icon">📷</span>
+                        <div class="camera-details" id="camera-details"></div>
+                    </div>
+                </div>
+                <div class="lightbox-nav">
+                    <button class="lightbox-prev">&#8249;</button>
+                    <button class="lightbox-next">&#8250;</button>
+                </div>
+            </div>
+            <div class="lightbox-info">
+                <h3 class="lightbox-title"></h3>
+                <p class="lightbox-description"></p>
+                <div class="lightbox-meta">
+                    <span class="lightbox-date"></span>
+                </div>
+                <div class="lightbox-exif" id="lightbox-exif">
+                    <button class="exif-toggle" id="exif-toggle">📷 Show EXIF Data</button>
+                    <div class="exif-panel" id="exif-panel" style="display: none;">
+                        <div class="exif-content" id="exif-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/social-links.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

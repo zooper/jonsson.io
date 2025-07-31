@@ -1,0 +1,218 @@
+/* Leica Theme - Classic Camera Aesthetics with Signature Red */
+:root {
+  /* Background Colors - Clean whites and warm grays */
+  --color-bg: #fdfcfb;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f8f7f6;
+  
+  /* Text Colors - Rich blacks and warm grays */
+  --color-text: #1a1a1a;
+  --color-text-secondary: #404040;
+  --color-text-muted: #707070;
+  
+  /* Accent Colors - Leica's signature red and supporting tones */
+  --color-accent: #e60012;
+  --color-accent-light: #ff1a2e;
+  --color-accent-dark: #b8000e;
+  
+  /* Border Colors - Subtle and refined */
+  --color-border: #e8e6e4;
+  --color-border-light: #f2f1f0;
+  
+  /* Component Colors */
+  --color-navbar-bg: rgba(253, 252, 251, 0.95);
+  --color-card-bg: #ffffff;
+  --color-overlay: rgba(26, 26, 26, 0.85);
+  
+  /* Shadows - Soft and sophisticated */
+  --shadow: 0 2px 12px rgba(26, 26, 26, 0.08);
+  --shadow-hover: 0 8px 24px rgba(26, 26, 26, 0.12);
+  
+  /* Leica-specific elements */
+  --leica-silver: #c4c4c4;
+  --leica-black: #2c2c2c;
+  --leica-cream: #faf9f7;
+}
+
+/* Typography overrides for Leica aesthetic */
+body {
+  font-family: 'Helvetica Neue', 'Arial', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.hero-title .title-main {
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+
+.hero-title .title-accent {
+  color: var(--color-accent);
+  font-weight: 400;
+}
+
+/* Navigation enhancements */
+.nav-btn.active {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
+.nav-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Social links styling */
+.social-link:hover {
+  color: var(--color-accent);
+  transform: translateY(-1px);
+}
+
+/* Gallery enhancements */
+.gallery-item {
+  border: 1px solid var(--color-border);
+  transition: all 0.3s ease;
+}
+
+.gallery-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--color-accent);
+}
+
+/* Lightbox styling */
+.lightbox {
+  background: rgba(26, 26, 26, 0.92);
+}
+
+.lightbox-info {
+  background: var(--leica-cream);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow);
+}
+
+.lightbox-title {
+  color: var(--color-accent);
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}
+
+.exif-toggle {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.exif-toggle:hover {
+  background: var(--color-accent-dark);
+  color: white;
+}
+
+/* Story cards */
+.story-card {
+  border: 1px solid var(--color-border);
+  background: var(--leica-cream);
+}
+
+.story-card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+
+.story-meta {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+/* About section enhancements */
+.about-stats .stat-number {
+  color: var(--color-accent);
+  font-weight: 300;
+}
+
+/* Button styling */
+.btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.btn-primary:hover {
+  background: var(--color-accent-dark);
+  border-color: var(--color-accent-dark);
+}
+
+.btn-outline {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.btn-outline:hover {
+  background: var(--color-accent);
+  color: white;
+}
+
+/* Loading animation */
+.loading-dot {
+  background: var(--color-accent);
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-tertiary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-accent);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dark);
+}
+
+/* Special Leica camera-inspired elements */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--color-accent) 50%, transparent 100%);
+  opacity: 0.8;
+}
+
+/* Refined focus states */
+.nav-btn:focus,
+.social-link:focus,
+button:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Enhanced image gallery hover effects */
+.masonry-item img {
+  transition: all 0.3s ease;
+}
+
+.masonry-item:hover img {
+  transform: scale(1.02);
+}
+
+/* Typography refinements */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.01em;
+  font-weight: 300;
+}
+
+.hero-subtitle {
+  color: var(--color-text-secondary);
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}

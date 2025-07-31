@@ -1,0 +1,30 @@
+/* Forest Theme - Natural Greens */
+:root {
+  /* Background Colors */
+  --color-bg: #f1f8e9;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #c8e6c9;
+  
+  /* Text Colors */
+  --color-text: #1b5e20;
+  --color-text-secondary: #2e7d32;
+  --color-text-muted: #4caf50;
+  
+  /* Accent Colors */
+  --color-accent: #4caf50;
+  --color-accent-light: #66bb6a;
+  --color-accent-dark: #388e3c;
+  
+  /* Border Colors */
+  --color-border: #a5d6a7;
+  --color-border-light: #c8e6c9;
+  
+  /* Component Colors */
+  --color-navbar-bg: rgba(241, 248, 233, 0.95);
+  --color-card-bg: #ffffff;
+  --color-overlay: rgba(27, 94, 32, 0.8);
+  
+  /* Shadows */
+  --shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+  --shadow-hover: 0 8px 25px rgba(76, 175, 80, 0.3);
+}

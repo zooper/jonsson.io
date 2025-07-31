@@ -1,0 +1,30 @@
+/* Solarized Light Theme */
+:root {
+  /* Background Colors */
+  --color-bg: #fdf6e3;
+  --color-bg-secondary: #eee8d5;
+  --color-bg-tertiary: #93a1a1;
+  
+  /* Text Colors */
+  --color-text: #657b83;
+  --color-text-secondary: #839496;
+  --color-text-muted: #93a1a1;
+  
+  /* Accent Colors */
+  --color-accent: #268bd2;
+  --color-accent-light: #2aa198;
+  --color-accent-dark: #6c71c4;
+  
+  /* Border Colors */
+  --color-border: #93a1a1;
+  --color-border-light: #eee8d5;
+  
+  /* Component Colors */
+  --color-navbar-bg: rgba(253, 246, 227, 0.95);
+  --color-card-bg: #eee8d5;
+  --color-overlay: rgba(101, 123, 131, 0.8);
+  
+  /* Shadows */
+  --shadow: 0 4px 12px rgba(147, 161, 161, 0.2);
+  --shadow-hover: 0 8px 25px rgba(147, 161, 161, 0.3);
+}

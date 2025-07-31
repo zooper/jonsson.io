@@ -1,0 +1,30 @@
+/* Sunset Theme - Warm Oranges */
+:root {
+  /* Background Colors */
+  --color-bg: #fff3e0;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #ffcc80;
+  
+  /* Text Colors */
+  --color-text: #bf360c;
+  --color-text-secondary: #d84315;
+  --color-text-muted: #ff5722;
+  
+  /* Accent Colors */
+  --color-accent: #ff9800;
+  --color-accent-light: #ffb74d;
+  --color-accent-dark: #f57c00;
+  
+  /* Border Colors */
+  --color-border: #ffb74d;
+  --color-border-light: #ffcc80;
+  
+  /* Component Colors */
+  --color-navbar-bg: rgba(255, 243, 224, 0.95);
+  --color-card-bg: #ffffff;
+  --color-overlay: rgba(191, 54, 12, 0.8);
+  
+  /* Shadows */
+  --shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
+  --shadow-hover: 0 8px 25px rgba(255, 152, 0, 0.3);
+}
