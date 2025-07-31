@@ -1,20 +1,22 @@
 name = "jonsson-photoblog"
-main = "src/worker.js"
+main = "src/index.js"
 compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "jonsson-photoblog-prod"
+database_id = "2e3d3aea-1cfc-4f4a-a821-2eb7a01ce65e"
 
 [env.production]
 name = "jonsson-photoblog-prod"
 
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "jonsson-photoblog-prod"
+database_id = "2e3d3aea-1cfc-4f4a-a821-2eb7a01ce65e"
+
 [env.staging]
 name = "jonsson-photoblog-staging"
-
-[[env.production.kv_namespaces]]
-binding = "CACHE"
-id = "your_kv_namespace_id_here"
-
-[[env.staging.kv_namespaces]]
-binding = "CACHE"
-id = "your_staging_kv_namespace_id_here"
 
 [vars]
 ENVIRONMENT = "development"
