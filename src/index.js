@@ -6542,6 +6542,239 @@ export default {
           });
         }
       }
+
+      // Admin: Browse bucket files
+      if (pathname === '/api/admin/bucket-files' && request.method === 'GET') {
+        const session = await isAuthenticated(request);
+        if (!session) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        const url = new URL(request.url);
+        const prefix = url.searchParams.get('prefix') || '';
+        const filter = url.searchParams.get('filter') || 'all';
+        const test = url.searchParams.get('test');
+
+        // If this is a test request, return diagnostic information
+        if (test === 'true') {
+          try {
+            const keyId = env.B2_APPLICATION_KEY_ID;
+            const key = env.B2_APPLICATION_KEY;
+            const bucketId = env.B2_BUCKET_ID;
+            const bucketName = env.B2_BUCKET_NAME;
+
+            if (!keyId || !key || !bucketId || !bucketName) {
+              return new Response(JSON.stringify({ 
+                success: false,
+                error: 'Missing B2 credentials',
+                missing: {
+                  keyId: !keyId,
+                  key: !key,
+                  bucketId: !bucketId,
+                  bucketName: !bucketName
+                }
+              }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+
+            // Test B2 authorization
+            const authUrl = 'https://api.backblazeb2.com/b2api/v2/b2_authorize_account';
+            const authResponse = await fetch(authUrl, {
+              method: 'GET',
+              headers: {
+                'Authorization': 'Basic ' + btoa(keyId + ':' + key)
+              }
+            });
+
+            if (!authResponse.ok) {
+              throw new Error(`B2 authorization failed: ${authResponse.status}`);
+            }
+
+            const authData = await authResponse.json();
+
+            return new Response(JSON.stringify({
+              success: true,
+              accountId: authData.accountId,
+              allowedBucket: authData.allowed?.bucketId,
+              configuredBucket: bucketId,
+              bucketMatch: authData.allowed?.bucketId === bucketId,
+              apiUrl: authData.apiUrl,
+              downloadUrl: authData.downloadUrl
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+
+          } catch (error) {
+            return new Response(JSON.stringify({ 
+              success: false,
+              error: error.message
+            }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+        }
+
+        try {
+          // Check environment variables
+          const keyId = env.B2_APPLICATION_KEY_ID;
+          const key = env.B2_APPLICATION_KEY;
+          const bucketId = env.B2_BUCKET_ID;
+          const bucketName = env.B2_BUCKET_NAME;
+
+          if (!keyId || !key || !bucketId || !bucketName) {
+            return new Response(JSON.stringify({ error: 'B2 credentials not configured' }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          // Authorize with B2
+          const authUrl = 'https://api.backblazeb2.com/b2api/v2/b2_authorize_account';
+          const authResponse = await fetch(authUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': 'Basic ' + btoa(keyId + ':' + key)
+            }
+          });
+
+          if (!authResponse.ok) {
+            throw new Error(`B2 authorization failed: ${authResponse.status}`);
+          }
+
+          const authData = await authResponse.json();
+
+          // List files with optional prefix
+          const listParams = new URLSearchParams({
+            bucketId: bucketId,
+            maxFileCount: '10000'
+          });
+
+          if (prefix) {
+            listParams.set('startFileName', prefix);
+            listParams.set('prefix', prefix);
+          }
+
+          const listUrl = `${authData.apiUrl}/b2api/v2/b2_list_file_names?${listParams}`;
+          const listResponse = await fetch(listUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': authData.authorizationToken
+            }
+          });
+
+          if (!listResponse.ok) {
+            throw new Error(`B2 list files failed: ${listResponse.status}`);
+          }
+
+          const listData = await listResponse.json();
+
+          if (!listData.files) {
+            return new Response(JSON.stringify({ files: [], folders: [] }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          // Get existing filenames from database
+          const { results: existingFiles } = await env.DB.prepare('SELECT filename FROM images').all();
+          const existingFileNames = new Set(existingFiles.map(f => f.filename));
+
+          const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.webp'];
+          const allFiles = listData.files;
+
+          // Process files to separate folders and files
+          const folders = new Set();
+          const files = [];
+
+          for (const file of allFiles) {
+            // Skip blog folder files when browsing root
+            if (!prefix && file.fileName.startsWith('blog/')) {
+              continue;
+            }
+
+            const relativePath = file.fileName.startsWith(prefix) 
+              ? file.fileName.substring(prefix.length)
+              : file.fileName;
+
+            // Check if this is a folder
+            const pathParts = relativePath.split('/');
+            if (pathParts.length > 1 && pathParts[0]) {
+              if (!prefix && pathParts[0] === 'blog') {
+                continue;
+              }
+              folders.add(pathParts[0]);
+              continue;
+            }
+
+            // Skip if it's empty or not in current directory
+            if (!relativePath || relativePath.includes('/')) {
+              continue;
+            }
+
+            const isImage = imageExtensions.some(ext => 
+              file.fileName.toLowerCase().endsWith(ext)
+            );
+            const isImported = existingFileNames.has(file.fileName);
+            const canImport = isImage && !isImported;
+
+            // Apply filter
+            if (filter === 'images' && !isImage) continue;
+            if (filter === 'new-images' && !canImport) continue;
+
+            files.push({
+              fileName: file.fileName,
+              displayName: relativePath,
+              fileId: file.fileId,
+              contentType: file.contentType,
+              contentLength: file.contentLength,
+              uploadTimestamp: file.uploadTimestamp,
+              url: `https://${bucketName}.s3.us-west-001.backblazeb2.com/${file.fileName}`,
+              isImage: isImage,
+              isImported: isImported,
+              canImport: canImport
+            });
+          }
+
+          // Convert folders Set to Array and sort
+          const folderArray = Array.from(folders).sort().map(folderName => ({
+            name: folderName,
+            path: prefix + folderName + '/'
+          }));
+
+          return new Response(JSON.stringify({
+            files: files.sort((a, b) => a.displayName.localeCompare(b.displayName)),
+            folders: folderArray,
+            currentPath: prefix,
+            stats: {
+              totalFiles: files.length,
+              imageFiles: files.filter(f => f.isImage).length,
+              importableFiles: files.filter(f => f.canImport).length
+            }
+          }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+        } catch (error) {
+          console.error('Error browsing bucket files:', error);
+          
+          let errorMessage = `Failed to browse bucket files: ${error.message}`;
+          if (error.message && error.message.includes('authorization')) {
+            errorMessage = 'B2 authorization failed. Check your B2 credentials.';
+          } else if (error.message && error.message.includes('bucket')) {
+            errorMessage = 'Invalid bucket configuration. Check B2_BUCKET_ID and B2_BUCKET_NAME.';
+          }
+
+          return new Response(JSON.stringify({ error: errorMessage }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
       
       // Default response
       return new Response('Not Found', { status: 404 });
