@@ -590,6 +590,93 @@ export default {
         }
       }
       
+      // ADMIN ENDPOINTS
+      
+      // Helper function to check authentication
+      async function isAuthenticated(request) {
+        const authHeader = request.headers.get('Authorization');
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return null;
+        }
+        
+        const token = authHeader.replace('Bearer ', '');
+        const { results } = await env.DB.prepare(`
+          SELECT * FROM admin_sessions 
+          WHERE token = ? AND expires_at > datetime('now')
+        `).bind(token).all();
+        
+        return results.length > 0 ? results[0] : null;
+      }
+      
+      // Admin: Login
+      if (pathname === '/api/admin/login' && request.method === 'POST') {
+        try {
+          const body = await request.json();
+          const { password } = body;
+          
+          // Check password against environment variable
+          if (password !== env.ADMIN_PASSWORD) {
+            return new Response(JSON.stringify({ error: 'Invalid password' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          
+          // Generate session token
+          const token = crypto.randomUUID();
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+          
+          // Save session to database
+          await env.DB.prepare(`
+            INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)
+          `).bind(token, expiresAt.toISOString()).run();
+          
+          return new Response(JSON.stringify({ token }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          console.error('Error during admin login:', error);
+          return new Response(JSON.stringify({ error: 'Login failed' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+      
+      // Admin: Get all posts (including unpublished)
+      if (pathname === '/api/admin/posts' && request.method === 'GET') {
+        const session = await isAuthenticated(request);
+        if (!session) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        try {
+          const { results } = await env.DB.prepare(`
+            SELECT 
+              p.*,
+              i.b2_url as featured_image_url,
+              i.alt_text as featured_image_alt,
+              p.featured_image_id
+            FROM posts p
+            LEFT JOIN images i ON p.featured_image_id = i.id
+            ORDER BY p.created_at DESC
+          `).all();
+          
+          return new Response(JSON.stringify(results), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          console.error('Error fetching admin posts:', error);
+          return new Response(JSON.stringify({ error: 'Failed to fetch posts' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+      
       // Serve individual post pages
       if (pathname.startsWith('/post/')) {
         const postHTML = STATIC_FILES['/post.html'];
