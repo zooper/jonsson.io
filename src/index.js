@@ -1,22 +1,22 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initDatabase } from './database.js';
 import { setupRoutes } from './routes.js';
 
 dotenv.config();
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// For Cloudflare Workers, we don't need to compute __dirname the same way
+const __dirname = '';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '../public')));
-app.use('/static', express.static(path.join(__dirname, '../static')));
-app.use('/admin', express.static(path.join(__dirname, '../admin')));
+app.use(express.static('./public'));
+app.use('/static', express.static('./static'));
+app.use('/admin', express.static('./admin'));
 
 // Initialize database
 await initDatabase();

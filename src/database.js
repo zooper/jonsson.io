@@ -1,9 +1,8 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../photoblog.db');
+// For Cloudflare Workers, we don't use local file paths the same way
+const dbPath = process.env.DATABASE_PATH || './photoblog.db';
 
 let db;
 

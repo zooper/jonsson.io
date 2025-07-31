@@ -3,11 +3,11 @@ import multer from 'multer';
 import { uploadImageToB2, deleteImageFromB2 } from './storage.js';
 import crypto from 'crypto';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import https from 'https';
 import http from 'http';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// For Cloudflare Workers, we don't need to compute __dirname the same way
+const __dirname = '';
 const upload = multer({ storage: multer.memoryStorage() });
 
 function createSlug(title) {
@@ -69,12 +69,12 @@ export function setupRoutes(app) {
   
   // Homepage - serve static HTML
   app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
+    res.sendFile(path.resolve('./public/index.html'));
   });
   
   // Individual post pages
   app.get('/post/:slug', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/post.html'));
+    res.sendFile(path.resolve('./public/post.html'));
   });
 
   // Public API: Get current theme (no authentication required)
@@ -1740,6 +1740,6 @@ export function setupRoutes(app) {
 
   // Admin route
   app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, '../admin/index.html'));
+    res.sendFile(path.resolve('./admin/index.html'));
   });
 }
