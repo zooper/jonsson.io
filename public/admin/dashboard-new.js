@@ -819,7 +819,6 @@ function populateSettingsForm(settings) {
         document.getElementById('aboutTitle').value = settings.about.title || 'About';
         document.getElementById('aboutLead').value = settings.about.lead || '';
         document.getElementById('aboutDescription').value = settings.about.description || '';
-        document.getElementById('aboutSkills').value = settings.about.skills?.join(', ') || '';
         
         // Profile picture
         if (settings.about.profilePicture) {
@@ -829,7 +828,7 @@ function populateSettingsForm(settings) {
     
     // Contact settings
     if (settings.contact) {
-        document.getElementById('contactTitle').value = settings.contact.title || 'Let\'s Create Together';
+        document.getElementById('contactTitle').value = settings.contact.title || 'Get In Touch';
         document.getElementById('contactSubtitle').value = settings.contact.subtitle || '';
         document.getElementById('contactEmail').value = settings.contact.email || '';
         document.getElementById('instagramHandle').value = settings.contact.instagramHandle || '';
@@ -921,8 +920,7 @@ async function saveAboutSettings() {
     const aboutSettings = {
         title: document.getElementById('aboutTitle').value,
         lead: document.getElementById('aboutLead').value,
-        description: document.getElementById('aboutDescription').value,
-        skills: document.getElementById('aboutSkills').value.split(',').map(s => s.trim()).filter(s => s)
+        description: document.getElementById('aboutDescription').value
     };
     
     try {

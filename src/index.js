@@ -1336,13 +1336,12 @@ async function handleGetPublicSiteSettings(request, env) {
             title: aboutTitle,
             lead: aboutLead,
             description: aboutDescription,
-            skills: aboutSkills ? JSON.parse(aboutSkills) : ['Portrait Photography', 'Street Photography', 'Landscape', 'Documentary'],
             profilePicture: profilePicture
         };
         
         // Contact settings
-        const contactTitle = await getSetting(env.DB, 'contact_title') || "Let's Create Together";
-        const contactSubtitle = await getSetting(env.DB, 'contact_subtitle') || "Ready to capture your story? Let's talk about bringing your vision to life.";
+        const contactTitle = await getSetting(env.DB, 'contact_title') || "Get In Touch";
+        const contactSubtitle = await getSetting(env.DB, 'contact_subtitle') || "Feel free to reach out if you'd like to connect or have any questions about my photography.";
         const contactEmail = await getSetting(env.DB, 'contact_email') || 'hello@jonsson.io';
         const instagramHandle = await getSetting(env.DB, 'instagram_handle') || 'jonsson';
         const instagramUrl = await getSetting(env.DB, 'instagram_url') || 'https://instagram.com/jonsson';

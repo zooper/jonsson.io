@@ -1059,6 +1059,10 @@ body {
         flex-direction: row;
     }
     
+    .contact-method {
+        flex: 1;
+    }
+    
     .loading-grid {
         grid-template-columns: repeat(2, 1fr);
     }

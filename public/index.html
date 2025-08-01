@@ -113,12 +113,6 @@
                         <h2 class="section-title" id="aboutTitle">About</h2>
                         <p class="lead" id="aboutLead">I'm a photographer passionate about capturing the beauty of everyday moments and the extraordinary in the ordinary.</p>
                         <p id="aboutDescription">My work focuses on natural light, authentic emotions, and the stories that unfold in front of my lens. Each photograph is a window into a moment that will never happen again exactly the same way.</p>
-                        <div class="about-skills" id="aboutSkills">
-                            <div class="skill-tag">Portrait Photography</div>
-                            <div class="skill-tag">Street Photography</div>
-                            <div class="skill-tag">Landscape</div>
-                            <div class="skill-tag">Documentary</div>
-                        </div>
                     </div>
                 </div>
                 
@@ -139,8 +133,8 @@
         <section id="contact" class="contact-section">
             <div class="contact-container">
                 <div class="contact-content glass-card">
-                    <h2 class="section-title" id="contactTitle">Let's Create Together</h2>
-                    <p class="contact-subtitle" id="contactSubtitle">Ready to capture your story? Let's talk about bringing your vision to life.</p>
+                    <h2 class="section-title" id="contactTitle">Get In Touch</h2>
+                    <p class="contact-subtitle" id="contactSubtitle">Feel free to reach out if you'd like to connect or have any questions about my photography.</p>
                     
                     <div class="contact-methods">
                         <a href="mailto:hello@jonsson.io" class="contact-method primary" id="contactEmailLink">
@@ -271,19 +265,11 @@
                 const aboutTitle = document.getElementById('aboutTitle');
                 const aboutLead = document.getElementById('aboutLead');
                 const aboutDescription = document.getElementById('aboutDescription');
-                const aboutSkills = document.getElementById('aboutSkills');
                 const aboutImageContainer = document.getElementById('aboutImageContainer');
                 
                 if (aboutTitle) aboutTitle.textContent = settings.about.title;
                 if (aboutLead) aboutLead.textContent = settings.about.lead;
                 if (aboutDescription) aboutDescription.textContent = settings.about.description;
-                
-                // Update skills
-                if (aboutSkills && settings.about.skills) {
-                    aboutSkills.innerHTML = settings.about.skills.map(skill => 
-                        `<div class="skill-tag">${skill}</div>`
-                    ).join('');
-                }
                 
                 // Update profile picture
                 if (aboutImageContainer && settings.about.profilePicture) {
