@@ -1,202 +1,356 @@
-import exifr from 'exifr';
+/**
+ * EXIF Data Extraction for Photography Metadata
+ * Extracts camera, lens, and GPS data from uploaded images
+ */
 
-export async function extractExifData(buffer) {
-  try {
-    
-    // Extract comprehensive EXIF data
-    const exifData = await exifr.parse(buffer, {
-      // Include all possible tags
-      tiff: true,
-      exif: true,
-      gps: true,
-      iptc: true,
-      icc: true,
-      jfif: true,
-      ihdr: true, // For PNG
-      // Advanced options
-      mergeOutput: true,
-      sanitize: false,
-      reviveValues: true,
-      translateKeys: true,
-      translateValues: true,
-      arrays: true,
-      chunked: false,
-      firstChunkSize: 40960,
-      chunkLimit: 5
-    });
-
-
-    if (!exifData) {
-      return null;
+export class ExifExtractor {
+    constructor() {
+        // EXIF tag mappings
+        this.tags = {
+            // Camera info
+            make: 0x010f,           // Camera manufacturer
+            model: 0x0110,          // Camera model
+            software: 0x0131,       // Software used
+            
+            // Lens info
+            lensModel: 0xa434,      // Lens model
+            lensMake: 0xa433,       // Lens manufacturer
+            focalLength: 0x920a,    // Focal length
+            fNumber: 0x829d,        // F-number
+            
+            // Exposure settings
+            exposureTime: 0x829a,   // Shutter speed
+            iso: 0x8827,            // ISO speed
+            exposureMode: 0xa402,   // Exposure mode
+            whiteBalance: 0xa403,   // White balance
+            
+            // GPS data
+            gpsLatitudeRef: 0x0001,
+            gpsLatitude: 0x0002,
+            gpsLongitudeRef: 0x0003,
+            gpsLongitude: 0x0004,
+            gpsAltitudeRef: 0x0005,
+            gpsAltitude: 0x0006,
+            
+            // Date/time
+            dateTime: 0x0132,       // Date and time
+            dateTimeOriginal: 0x9003, // Original date/time
+        };
     }
 
-    // Extract and normalize key photography data
-    const normalized = {
-      // Camera information
-      camera_make: exifData.Make || null,
-      camera_model: exifData.Model || null,
-      lens_make: exifData.LensMake || null,
-      lens_model: exifData.LensModel || exifData.Lens || null,
-      
-      // Photography settings
-      focal_length: exifData.FocalLength || null,
-      focal_length_35mm: exifData.FocalLengthIn35mmFilm || null,
-      aperture: exifData.FNumber || exifData.ApertureValue || null,
-      shutter_speed: formatShutterSpeed(exifData.ExposureTime || exifData.ShutterSpeedValue),
-      iso: exifData.ISO || exifData.PhotographicSensitivity || null,
-      
-      // Flash and exposure
-      flash: formatFlash(exifData.Flash),
-      exposure_mode: formatExposureMode(exifData.ExposureMode),
-      white_balance: formatWhiteBalance(exifData.WhiteBalance),
-      metering_mode: formatMeteringMode(exifData.MeteringMode),
-      
-      // Date and location
-      date_taken: formatDateTime(exifData.DateTimeOriginal || exifData.DateTime || exifData.CreateDate),
-      gps_latitude: exifData.latitude || null,
-      gps_longitude: exifData.longitude || null,
-      gps_altitude: exifData.GPSAltitude || null,
-      
-      // Image properties
-      orientation: exifData.Orientation || null,
-      color_space: formatColorSpace(exifData.ColorSpace),
-      
-      // Creator information
-      software: exifData.Software || null,
-      artist: exifData.Artist || exifData.Creator || null,
-      copyright: exifData.Copyright || null,
-      description: exifData.ImageDescription || exifData.Description || null,
-      keywords: formatKeywords(exifData.Keywords || exifData.Subject),
-      rating: exifData.Rating || null,
-      
-      // Store complete raw EXIF data as JSON
-      raw_exif: JSON.stringify(exifData)
-    };
+    /**
+     * Extract EXIF data from image ArrayBuffer
+     */
+    async extractExif(imageBuffer) {
+        try {
+            const dataView = new DataView(imageBuffer);
+            
+            // Check if it's a JPEG file
+            if (dataView.getUint16(0) !== 0xFFD8) {
+                console.log('Not a JPEG file, skipping EXIF extraction');
+                return null;
+            }
 
-    return normalized;
-    
-  } catch (error) {
-    console.error('EXIF extraction error:', error.message);
-    return null;
-  }
-}
-
-function formatShutterSpeed(exposureTime) {
-  if (!exposureTime) return null;
-  
-  if (exposureTime >= 1) {
-    return `${exposureTime}s`;
-  } else {
-    const fraction = Math.round(1 / exposureTime);
-    return `1/${fraction}s`;
-  }
-}
-
-function formatFlash(flash) {
-  if (!flash && flash !== 0) return null;
-  
-  const flashModes = {
-    0: 'No Flash',
-    1: 'Flash',
-    5: 'Flash, No Strobe Return',
-    7: 'Flash, Strobe Return',
-    9: 'Flash, Compulsory',
-    13: 'Flash, Compulsory, No Strobe Return',
-    15: 'Flash, Compulsory, Strobe Return',
-    16: 'No Flash, Compulsory',
-    24: 'No Flash, Auto',
-    25: 'Flash, Auto',
-    29: 'Flash, Auto, No Strobe Return',
-    31: 'Flash, Auto, Strobe Return',
-    32: 'No Flash Available'
-  };
-  
-  return flashModes[flash] || `Flash (${flash})`;
-}
-
-function formatExposureMode(mode) {
-  if (!mode && mode !== 0) return null;
-  
-  const modes = {
-    0: 'Auto',
-    1: 'Manual',
-    2: 'Auto Bracket'
-  };
-  
-  return modes[mode] || `Mode ${mode}`;
-}
-
-function formatWhiteBalance(wb) {
-  if (!wb && wb !== 0) return null;
-  
-  const wbModes = {
-    0: 'Auto',
-    1: 'Manual'
-  };
-  
-  return wbModes[wb] || `WB ${wb}`;
-}
-
-function formatMeteringMode(mode) {
-  if (!mode && mode !== 0) return null;
-  
-  const modes = {
-    0: 'Unknown',
-    1: 'Average',
-    2: 'Center-weighted Average',
-    3: 'Spot',
-    4: 'Multi-spot',
-    5: 'Multi-segment',
-    6: 'Partial',
-    255: 'Other'
-  };
-  
-  return modes[mode] || `Metering ${mode}`;
-}
-
-function formatColorSpace(colorSpace) {
-  if (!colorSpace && colorSpace !== 0) return null;
-  
-  const spaces = {
-    1: 'sRGB',
-    2: 'Adobe RGB',
-    65535: 'Uncalibrated'
-  };
-  
-  return spaces[colorSpace] || `ColorSpace ${colorSpace}`;
-}
-
-function formatKeywords(keywords) {
-  if (!keywords) return null;
-  
-  if (Array.isArray(keywords)) {
-    return keywords.join(', ');
-  }
-  
-  return keywords.toString();
-}
-
-function formatDateTime(dateTime) {
-  if (!dateTime) return null;
-  
-  try {
-    // Handle various date formats
-    if (dateTime instanceof Date) {
-      return dateTime.toISOString();
+            // Find EXIF marker
+            let offset = 2;
+            while (offset < dataView.byteLength - 4) {
+                const marker = dataView.getUint16(offset);
+                
+                if (marker === 0xFFE1) { // EXIF marker
+                    console.log('Found EXIF marker at offset:', offset);
+                    const segmentLength = dataView.getUint16(offset + 2);
+                    console.log('EXIF segment length:', segmentLength);
+                    
+                    const exifData = this.parseExifData(dataView, offset);
+                    console.log('Raw EXIF data extracted:', exifData);
+                    
+                    const formatted = this.formatExifData(exifData);
+                    console.log('Formatted EXIF data:', formatted);
+                    
+                    return formatted;
+                }
+                
+                // Move to next marker
+                const segmentLength = dataView.getUint16(offset + 2);
+                if (segmentLength < 2) break; // Invalid segment length
+                offset += 2 + segmentLength;
+            }
+            
+            console.log('No EXIF data found in image');
+            return null;
+        } catch (error) {
+            console.error('EXIF extraction error:', error);
+            return null;
+        }
     }
-    
-    if (typeof dateTime === 'string') {
-      // Handle EXIF date format: "YYYY:MM:DD HH:MM:SS"
-      const normalized = dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3');
-      const date = new Date(normalized);
-      
-      if (!isNaN(date.getTime())) {
-        return date.toISOString();
-      }
+
+    /**
+     * Parse EXIF data from DataView
+     */
+    parseExifData(dataView, offset) {
+        const exifData = {};
+        
+        try {
+            // Skip to EXIF header
+            offset += 4; // Skip segment length
+            
+            // Check for "Exif\0\0" header
+            const exifHeader = new Uint8Array(dataView.buffer, offset, 6);
+            const expectedHeader = new Uint8Array([0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
+            
+            if (!this.arrayEquals(exifHeader, expectedHeader)) {
+                return exifData;
+            }
+            
+            offset += 6;
+            
+            // Read TIFF header
+            const byteOrder = dataView.getUint16(offset);
+            const isLittleEndian = byteOrder === 0x4949;
+            
+            // Read IFD offset
+            const ifdOffset = this.readUint32(dataView, offset + 4, isLittleEndian);
+            
+            // Parse IFD - pass the TIFF header offset for pointer calculations
+            this.parseIFD(dataView, offset + ifdOffset, isLittleEndian, exifData, offset);
+            
+        } catch (error) {
+            console.error('EXIF parsing error:', error);
+        }
+        
+        return exifData;
     }
-    
-    return null;
-  } catch (error) {
-    return null;
-  }
+
+    /**
+     * Parse Image File Directory (IFD)
+     */
+    parseIFD(dataView, offset, isLittleEndian, exifData, tiffHeaderOffset = 0) {
+        const entryCount = this.readUint16(dataView, offset, isLittleEndian);
+        offset += 2;
+
+        for (let i = 0; i < entryCount; i++) {
+            const entryOffset = offset + (i * 12);
+            const tag = this.readUint16(dataView, entryOffset, isLittleEndian);
+            const type = this.readUint16(dataView, entryOffset + 2, isLittleEndian);
+            const count = this.readUint32(dataView, entryOffset + 4, isLittleEndian);
+            const valueOffset = entryOffset + 8;
+
+            const value = this.readTagValue(dataView, type, count, valueOffset, isLittleEndian, tiffHeaderOffset);
+            
+            // Store known tags
+            for (const [tagName, tagId] of Object.entries(this.tags)) {
+                if (tag === tagId) {
+                    exifData[tagName] = value;
+                    break;
+                }
+            }
+
+            // Handle EXIF sub-IFD
+            if (tag === 0x8769) { // EXIF IFD offset
+                this.parseIFD(dataView, tiffHeaderOffset + value, isLittleEndian, exifData, tiffHeaderOffset);
+            }
+            
+            // Handle GPS sub-IFD
+            if (tag === 0x8825) { // GPS IFD offset
+                this.parseIFD(dataView, tiffHeaderOffset + value, isLittleEndian, exifData, tiffHeaderOffset);
+            }
+        }
+    }
+
+    /**
+     * Read tag value based on type
+     */
+    readTagValue(dataView, type, count, offset, isLittleEndian, tiffHeaderOffset = 0) {
+        try {
+            switch (type) {
+                case 1: // BYTE
+                    return dataView.getUint8(offset);
+                case 2: // ASCII
+                    // If count > 4, the value is a pointer to the actual string
+                    if (count > 4) {
+                        const stringOffset = this.readUint32(dataView, offset, isLittleEndian);
+                        return this.readString(dataView, tiffHeaderOffset + stringOffset, count);
+                    } else {
+                        return this.readString(dataView, offset, count);
+                    }
+                case 3: // SHORT
+                    return this.readUint16(dataView, offset, isLittleEndian);
+                case 4: // LONG
+                    return this.readUint32(dataView, offset, isLittleEndian);
+                case 5: // RATIONAL
+                    // GPS coordinates are typically stored as arrays of 3 rationals: [degrees, minutes, seconds]
+                    if (count > 1) {
+                        const rationalOffset = this.readUint32(dataView, offset, isLittleEndian);
+                        const rationals = [];
+                        
+                        for (let i = 0; i < count; i++) {
+                            const pos = tiffHeaderOffset + rationalOffset + (i * 8); // Each rational is 8 bytes
+                            const numerator = this.readUint32(dataView, pos, isLittleEndian);
+                            const denominator = this.readUint32(dataView, pos + 4, isLittleEndian);
+                            rationals.push(denominator ? numerator / denominator : 0);
+                        }
+                        
+                        return count === 1 ? rationals[0] : rationals;
+                    } else {
+                        const numerator = this.readUint32(dataView, offset, isLittleEndian);
+                        const denominator = this.readUint32(dataView, offset + 4, isLittleEndian);
+                        return denominator ? numerator / denominator : 0;
+                    }
+                default:
+                    return null;
+            }
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * Format extracted EXIF data for storage
+     */
+    formatExifData(rawExif) {
+        const formatted = {
+            camera: null,
+            lens: null,
+            settings: null,
+            gps: null,
+            timestamp: null
+        };
+
+        // Camera info - handle Leica and other manufacturers
+        if (rawExif.make || rawExif.model) {
+            let make = rawExif.make || '';
+            let model = rawExif.model || '';
+            
+            // Clean up common manufacturer variations
+            if (make.toLowerCase().includes('leica')) {
+                make = 'Leica';
+            }
+            
+            formatted.camera = {
+                make: make,
+                model: model,
+                software: rawExif.software || ''
+            };
+        }
+
+        // Lens info
+        if (rawExif.lensModel || rawExif.focalLength) {
+            formatted.lens = {
+                model: rawExif.lensModel || rawExif.lensMake || '',
+                focalLength: rawExif.focalLength ? Math.round(rawExif.focalLength) + 'mm' : null,
+                aperture: rawExif.fNumber ? 'f/' + rawExif.fNumber.toFixed(1) : null
+            };
+        }
+
+        // Camera settings
+        if (rawExif.exposureTime || rawExif.iso || rawExif.fNumber || rawExif.focalLength) {
+            formatted.settings = {
+                shutterSpeed: rawExif.exposureTime ? this.formatShutterSpeed(rawExif.exposureTime) : null,
+                iso: rawExif.iso ? 'ISO ' + rawExif.iso : null,
+                aperture: rawExif.fNumber ? 'f/' + rawExif.fNumber.toFixed(1) : null,
+                focalLength: rawExif.focalLength ? Math.round(rawExif.focalLength) + 'mm' : null
+            };
+        }
+
+        // GPS data
+        if (rawExif.gpsLatitude && rawExif.gpsLongitude) {
+            const latitude = this.parseGPSCoordinate(rawExif.gpsLatitude, rawExif.gpsLatitudeRef);
+            const longitude = this.parseGPSCoordinate(rawExif.gpsLongitude, rawExif.gpsLongitudeRef);
+            
+            formatted.gps = {
+                latitude: latitude,
+                longitude: longitude,
+                altitude: rawExif.gpsAltitude || null
+            };
+        }
+
+        // Date taken - store both raw and formatted versions
+        const dateTimeOriginal = rawExif.dateTimeOriginal || rawExif.dateTime;
+        if (dateTimeOriginal) {
+            try {
+                // Convert EXIF timestamp format (YYYY:MM:DD HH:MM:SS) to ISO
+                // Need to replace only the first two colons with dashes for date part
+                const dateStr = dateTimeOriginal.replace(/^(\d{4}):(\d{2}):(\d{2}) (.+)$/, '$1-$2-$3T$4');
+                const date = new Date(dateStr);
+                if (!isNaN(date.getTime())) {
+                    // Store ISO string for database
+                    formatted.timestamp = date.toISOString();
+                    // Also store formatted version for display
+                    formatted.dateTaken = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            } catch (e) {
+                formatted.timestamp = dateTimeOriginal;
+                formatted.dateTaken = dateTimeOriginal;
+            }
+        }
+
+        return formatted;
+    }
+
+    /**
+     * Format shutter speed for display
+     */
+    formatShutterSpeed(exposureTime) {
+        if (exposureTime >= 1) {
+            return exposureTime.toFixed(1) + 's';
+        } else {
+            return '1/' + Math.round(1 / exposureTime) + 's';
+        }
+    }
+
+    /**
+     * Parse GPS coordinates
+     */
+    parseGPSCoordinate(coord, ref) {
+        if (!coord) return null;
+        
+        let decimal;
+        
+        // Handle array format [degrees, minutes, seconds]
+        if (Array.isArray(coord) && coord.length >= 3) {
+            const degrees = coord[0];
+            const minutes = coord[1];
+            const seconds = coord[2];
+            decimal = degrees + (minutes / 60) + (seconds / 3600);
+        }
+        // Handle single decimal value
+        else if (typeof coord === 'number') {
+            decimal = coord;
+        }
+        // Handle other formats
+        else {
+            return null;
+        }
+        
+        // Apply direction (negative for South/West)
+        if (ref === 'S' || ref === 'W') {
+            decimal = -decimal;
+        }
+        
+        return decimal;
+    }
+
+    // Utility functions
+    readUint16(dataView, offset, isLittleEndian) {
+        return dataView.getUint16(offset, isLittleEndian);
+    }
+
+    readUint32(dataView, offset, isLittleEndian) {
+        return dataView.getUint32(offset, isLittleEndian);
+    }
+
+    readString(dataView, offset, length) {
+        const bytes = new Uint8Array(dataView.buffer, offset, length - 1); // -1 to exclude null terminator
+        return new TextDecoder().decode(bytes);
+    }
+
+    arrayEquals(a, b) {
+        return a.length === b.length && a.every((val, i) => val === b[i]);
+    }
 }
