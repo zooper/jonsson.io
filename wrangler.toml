@@ -3,25 +3,33 @@ main = "src/index.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Static assets configuration
+assets = { directory = "./public", binding = "ASSETS" }
+
+# D1 Database configuration
+[[d1_databases]]
+binding = "DB"
+database_name = "jonsson-photos-db"
+database_id = "66dd8c3c-125f-4627-a0b7-810a65dd7182"
+
 [build]
 command = ""
 
-[build.upload]
-format = "modules"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "jonsson-photoblog-prod"
-database_id = "2e3d3aea-1cfc-4f4a-a821-2eb7a01ce65e"
-
 [vars]
 ENVIRONMENT = "development"
-ADMIN_PASSWORD = "admin123"
+# B2 credentials are loaded from .dev.vars file automatically
+# B2_APPLICATION_KEY_ID = "your-key-id"
+# B2_APPLICATION_KEY = "your-application-key"
+# B2_BUCKET_ID = "your-bucket-id"
+# B2_BUCKET_NAME = "your-bucket-name"
 
 [env.production.vars]
 ENVIRONMENT = "production"
-ADMIN_PASSWORD = "admin123"
+# For production, set these as secrets:
+# wrangler secret put B2_APPLICATION_KEY_ID
+# wrangler secret put B2_APPLICATION_KEY
+# wrangler secret put B2_BUCKET_ID
+# wrangler secret put B2_BUCKET_NAME
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-ADMIN_PASSWORD = "admin123"
