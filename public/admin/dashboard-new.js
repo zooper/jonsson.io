@@ -179,9 +179,11 @@ function loadSectionData(sectionName) {
         case 'themes':
             loadThemes();
             break;
+        case 'settings':
+            loadSiteSettings();
+            break;
         case 'dashboard':
         case 'visitors':
-        case 'settings':
             // Placeholder sections - no data to load yet
             break;
     }
@@ -787,5 +789,191 @@ async function applyTheme(themeId) {
         toast.error('Apply Failed', 'Failed to apply theme');
         applyBtn.disabled = false;
         applyBtn.textContent = 'Apply Selected Theme';
+    }
+}
+
+// Site Settings Management Functions
+async function loadSiteSettings() {
+    try {
+        const response = await fetch('/admin/api/site-settings', {
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (response.ok) {
+            const settings = await response.json();
+            populateSettingsForm(settings);
+        } else {
+            console.log('No site settings found, using defaults');
+        }
+    } catch (error) {
+        console.error('Error loading site settings:', error);
+        toast.error('Error', 'Failed to load site settings');
+    }
+}
+
+function populateSettingsForm(settings) {
+    // About settings
+    if (settings.about) {
+        document.getElementById('aboutTitle').value = settings.about.title || 'About';
+        document.getElementById('aboutLead').value = settings.about.lead || '';
+        document.getElementById('aboutDescription').value = settings.about.description || '';
+        document.getElementById('aboutSkills').value = settings.about.skills?.join(', ') || '';
+        
+        // Profile picture
+        if (settings.about.profilePicture) {
+            showProfilePicture(settings.about.profilePicture);
+        }
+    }
+    
+    // Contact settings
+    if (settings.contact) {
+        document.getElementById('contactTitle').value = settings.contact.title || 'Let\'s Create Together';
+        document.getElementById('contactSubtitle').value = settings.contact.subtitle || '';
+        document.getElementById('contactEmail').value = settings.contact.email || '';
+        document.getElementById('instagramHandle').value = settings.contact.instagramHandle || '';
+        document.getElementById('instagramUrl').value = settings.contact.instagramUrl || '';
+    }
+}
+
+function showProfilePicture(imageUrl) {
+    const container = document.getElementById('currentProfileImage');
+    container.innerHTML = `<img src="${imageUrl}" alt="Profile Picture">`;
+    
+    const removeBtn = document.getElementById('removeProfileBtn');
+    removeBtn.style.display = 'inline-flex';
+}
+
+async function handleProfileImageUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('profileImage', file);
+    
+    try {
+        toast.info('Uploading', 'Uploading profile picture...', 0);
+        
+        const response = await fetch('/admin/api/upload-profile-image', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            },
+            body: formData
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            showProfilePicture(result.imageUrl);
+            toast.success('Upload Complete', 'Profile picture uploaded successfully');
+        } else {
+            const error = await response.json();
+            toast.error('Upload Failed', error.message || 'Failed to upload profile picture');
+        }
+    } catch (error) {
+        console.error('Profile image upload failed:', error);
+        toast.error('Upload Failed', error.message);
+    } finally {
+        input.value = ''; // Reset file input
+    }
+}
+
+async function removeProfilePicture() {
+    if (!confirm('Are you sure you want to remove your profile picture?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/remove-profile-image', {
+            method: 'DELETE',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (response.ok) {
+            const container = document.getElementById('currentProfileImage');
+            container.innerHTML = `
+                <div class="image-placeholder">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 2l3 3h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h3zm3 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                    </svg>
+                    <p>No profile picture uploaded</p>
+                </div>
+            `;
+            
+            const removeBtn = document.getElementById('removeProfileBtn');
+            removeBtn.style.display = 'none';
+            
+            toast.success('Removed', 'Profile picture removed successfully');
+        } else {
+            const error = await response.json();
+            toast.error('Remove Failed', error.message || 'Failed to remove profile picture');
+        }
+    } catch (error) {
+        console.error('Remove profile picture failed:', error);
+        toast.error('Remove Failed', error.message);
+    }
+}
+
+async function saveAboutSettings() {
+    const aboutSettings = {
+        title: document.getElementById('aboutTitle').value,
+        lead: document.getElementById('aboutLead').value,
+        description: document.getElementById('aboutDescription').value,
+        skills: document.getElementById('aboutSkills').value.split(',').map(s => s.trim()).filter(s => s)
+    };
+    
+    try {
+        const response = await fetch('/admin/api/site-settings/about', {
+            method: 'PUT',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(aboutSettings)
+        });
+        
+        if (response.ok) {
+            toast.success('Settings Saved', 'About section settings saved successfully');
+        } else {
+            const error = await response.json();
+            toast.error('Save Failed', error.message || 'Failed to save about settings');
+        }
+    } catch (error) {
+        console.error('Save about settings failed:', error);
+        toast.error('Save Failed', error.message);
+    }
+}
+
+async function saveContactSettings() {
+    const contactSettings = {
+        title: document.getElementById('contactTitle').value,
+        subtitle: document.getElementById('contactSubtitle').value,
+        email: document.getElementById('contactEmail').value,
+        instagramHandle: document.getElementById('instagramHandle').value,
+        instagramUrl: document.getElementById('instagramUrl').value
+    };
+    
+    try {
+        const response = await fetch('/admin/api/site-settings/contact', {
+            method: 'PUT',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(contactSettings)
+        });
+        
+        if (response.ok) {
+            toast.success('Settings Saved', 'Contact settings saved successfully');
+        } else {
+            const error = await response.json();
+            toast.error('Save Failed', error.message || 'Failed to save contact settings');
+        }
+    } catch (error) {
+        console.error('Save contact settings failed:', error);
+        toast.error('Save Failed', error.message);
     }
 }

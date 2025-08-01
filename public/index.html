@@ -7,9 +7,10 @@
     <meta name="description" content="Photography portfolio by Jonsson - capturing life through the lens">
     <meta name="theme-color" content="#0a0a0f">
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/themes/modern.css" id="theme-stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Crimson+Text:wght@400;600&family=Courier+Prime:wght@400;700&family=Dancing+Script:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -109,10 +110,10 @@
             <div class="about-container">
                 <div class="about-content glass-card">
                     <div class="about-text">
-                        <h2 class="section-title">About</h2>
-                        <p class="lead">I'm a photographer passionate about capturing the beauty of everyday moments and the extraordinary in the ordinary.</p>
-                        <p>My work focuses on natural light, authentic emotions, and the stories that unfold in front of my lens. Each photograph is a window into a moment that will never happen again exactly the same way.</p>
-                        <div class="about-skills">
+                        <h2 class="section-title" id="aboutTitle">About</h2>
+                        <p class="lead" id="aboutLead">I'm a photographer passionate about capturing the beauty of everyday moments and the extraordinary in the ordinary.</p>
+                        <p id="aboutDescription">My work focuses on natural light, authentic emotions, and the stories that unfold in front of my lens. Each photograph is a window into a moment that will never happen again exactly the same way.</p>
+                        <div class="about-skills" id="aboutSkills">
                             <div class="skill-tag">Portrait Photography</div>
                             <div class="skill-tag">Street Photography</div>
                             <div class="skill-tag">Landscape</div>
@@ -123,7 +124,7 @@
                 
                 <div class="about-visual glass-card">
                     <div class="about-image-container">
-                        <div class="about-placeholder">
+                        <div class="about-placeholder" id="aboutImageContainer">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M9 2l3 3h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h3zm3 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
                             </svg>
@@ -138,11 +139,11 @@
         <section id="contact" class="contact-section">
             <div class="contact-container">
                 <div class="contact-content glass-card">
-                    <h2 class="section-title">Let's Create Together</h2>
-                    <p class="contact-subtitle">Ready to capture your story? Let's talk about bringing your vision to life.</p>
+                    <h2 class="section-title" id="contactTitle">Let's Create Together</h2>
+                    <p class="contact-subtitle" id="contactSubtitle">Ready to capture your story? Let's talk about bringing your vision to life.</p>
                     
                     <div class="contact-methods">
-                        <a href="mailto:hello@jonsson.io" class="contact-method primary">
+                        <a href="mailto:hello@jonsson.io" class="contact-method primary" id="contactEmailLink">
                             <div class="method-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -151,11 +152,11 @@
                             </div>
                             <div class="method-content">
                                 <span class="method-label">Email</span>
-                                <span class="method-value">hello@jonsson.io</span>
+                                <span class="method-value" id="contactEmailText">hello@jonsson.io</span>
                             </div>
                         </a>
                         
-                        <a href="https://instagram.com/jonsson" target="_blank" class="contact-method">
+                        <a href="https://instagram.com/jonsson" target="_blank" class="contact-method" id="instagramLink">
                             <div class="method-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor">
                                     <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
@@ -165,7 +166,7 @@
                             </div>
                             <div class="method-content">
                                 <span class="method-label">Instagram</span>
-                                <span class="method-value">@jonsson</span>
+                                <span class="method-value" id="instagramHandle">@jonsson</span>
                             </div>
                         </a>
                     </div>
@@ -230,5 +231,103 @@
     
     <!-- Scripts -->
     <script src="/static/js/gallery.js"></script>
+    
+    <!-- Theme and Site Settings Loading Script -->
+    <script>
+        // Load the current theme
+        async function loadCurrentTheme() {
+            try {
+                const response = await fetch('/api/theme');
+                if (response.ok) {
+                    const data = await response.json();
+                    const themeStylesheet = document.getElementById('theme-stylesheet');
+                    if (themeStylesheet && data.cssUrl) {
+                        themeStylesheet.href = data.cssUrl;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load theme:', error);
+                // Fallback to modern theme if loading fails
+            }
+        }
+        
+        // Load site settings
+        async function loadSiteSettings() {
+            try {
+                const response = await fetch('/api/site-settings');
+                if (response.ok) {
+                    const settings = await response.json();
+                    updatePageContent(settings);
+                }
+            } catch (error) {
+                console.error('Failed to load site settings:', error);
+                // Use default content if loading fails
+            }
+        }
+        
+        function updatePageContent(settings) {
+            // Update About section
+            if (settings.about) {
+                const aboutTitle = document.getElementById('aboutTitle');
+                const aboutLead = document.getElementById('aboutLead');
+                const aboutDescription = document.getElementById('aboutDescription');
+                const aboutSkills = document.getElementById('aboutSkills');
+                const aboutImageContainer = document.getElementById('aboutImageContainer');
+                
+                if (aboutTitle) aboutTitle.textContent = settings.about.title;
+                if (aboutLead) aboutLead.textContent = settings.about.lead;
+                if (aboutDescription) aboutDescription.textContent = settings.about.description;
+                
+                // Update skills
+                if (aboutSkills && settings.about.skills) {
+                    aboutSkills.innerHTML = settings.about.skills.map(skill => 
+                        `<div class="skill-tag">${skill}</div>`
+                    ).join('');
+                }
+                
+                // Update profile picture
+                if (aboutImageContainer && settings.about.profilePicture) {
+                    aboutImageContainer.innerHTML = `<img src="${settings.about.profilePicture}" alt="Profile Picture" style="width: 100%; height: 100%; object-fit: cover;">`;
+                }
+            }
+            
+            // Update Contact section
+            if (settings.contact) {
+                const contactTitle = document.getElementById('contactTitle');
+                const contactSubtitle = document.getElementById('contactSubtitle');
+                const contactEmailLink = document.getElementById('contactEmailLink');
+                const contactEmailText = document.getElementById('contactEmailText');
+                const instagramLink = document.getElementById('instagramLink');
+                const instagramHandle = document.getElementById('instagramHandle');
+                
+                if (contactTitle) contactTitle.textContent = settings.contact.title;
+                if (contactSubtitle) contactSubtitle.textContent = settings.contact.subtitle;
+                
+                if (contactEmailLink && settings.contact.email) {
+                    contactEmailLink.href = `mailto:${settings.contact.email}`;
+                }
+                if (contactEmailText) contactEmailText.textContent = settings.contact.email;
+                
+                if (instagramLink && settings.contact.instagramUrl) {
+                    instagramLink.href = settings.contact.instagramUrl;
+                }
+                if (instagramHandle && settings.contact.instagramHandle) {
+                    instagramHandle.textContent = `@${settings.contact.instagramHandle}`;
+                }
+            }
+        }
+        
+        // Load everything when DOM is ready
+        function initializePage() {
+            loadCurrentTheme();
+            loadSiteSettings();
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
+    </script>
 </body>
 </html>
