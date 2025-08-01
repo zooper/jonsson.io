@@ -1,247 +1,332 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+/**
+ * Database service for photo metadata and EXIF data using Cloudflare D1
+ */
 
-// For Cloudflare Workers, we don't use local file paths the same way
-const dbPath = process.env.DATABASE_PATH || './photoblog.db';
-
-let db;
-
-export function getDatabase() {
-  if (!db) {
-    db = new Database(dbPath);
-  }
-  return db;
-}
-
-export async function initDatabase() {
-  const database = getDatabase();
-  
-  // Enable foreign keys
-  database.pragma('foreign_keys = ON');
-  
-  // Create posts table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS posts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      content TEXT,
-      slug TEXT UNIQUE NOT NULL,
-      featured_image_id INTEGER,
-      published BOOLEAN DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (featured_image_id) REFERENCES images (id)
-    )
-  `);
-  
-  // Create images table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      filename TEXT NOT NULL,
-      original_filename TEXT NOT NULL,
-      alt_text TEXT,
-      caption TEXT,
-      b2_file_id TEXT,
-      b2_url TEXT,
-      width INTEGER,
-      height INTEGER,
-      file_size INTEGER,
-      mime_type TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Create EXIF data table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS image_exif (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      image_id INTEGER NOT NULL,
-      camera_make TEXT,
-      camera_model TEXT,
-      lens_make TEXT,
-      lens_model TEXT,
-      focal_length REAL,
-      focal_length_35mm INTEGER,
-      aperture REAL,
-      shutter_speed TEXT,
-      iso INTEGER,
-      flash TEXT,
-      exposure_mode TEXT,
-      white_balance TEXT,
-      metering_mode TEXT,
-      date_taken DATETIME,
-      gps_latitude REAL,
-      gps_longitude REAL,
-      gps_altitude REAL,
-      orientation INTEGER,
-      color_space TEXT,
-      software TEXT,
-      artist TEXT,
-      copyright TEXT,
-      description TEXT,
-      keywords TEXT,
-      rating INTEGER,
-      raw_exif TEXT, -- JSON string of all EXIF data
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
-    )
-  `);
-  
-  // Create post_images junction table for multiple images per post
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS post_images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      post_id INTEGER NOT NULL,
-      image_id INTEGER NOT NULL,
-      sort_order INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
-      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
-      UNIQUE(post_id, image_id)
-    )
-  `);
-  
-  // Create tags table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS tags (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      slug TEXT UNIQUE NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // Create post_tags junction table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS post_tags (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      post_id INTEGER NOT NULL,
-      tag_id INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
-      FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
-      UNIQUE(post_id, tag_id)
-    )
-  `);
-  
-  // Create gallery table for homepage gallery
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS gallery (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      image_id INTEGER NOT NULL,
-      title TEXT,
-      description TEXT,
-      sort_order INTEGER DEFAULT 0,
-      visible BOOLEAN DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
-      UNIQUE(image_id)
-    )
-  `);
-
-  // Create admin sessions table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS admin_sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      token TEXT UNIQUE NOT NULL,
-      expires_at DATETIME NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Create about page table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS about_page (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL DEFAULT 'About',
-      lead_text TEXT,
-      content TEXT,
-      profile_image_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (profile_image_id) REFERENCES images (id)
-    )
-  `);
-
-  // Create site settings table for themes and other settings
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS site_settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      setting_key TEXT UNIQUE NOT NULL,
-      setting_value TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Insert default theme if none exists
-  const themeExists = database.prepare('SELECT COUNT(*) as count FROM site_settings WHERE setting_key = ?').get('theme').count;
-  if (themeExists === 0) {
-    database.prepare(`
-      INSERT INTO site_settings (setting_key, setting_value) 
-      VALUES (?, ?)
-    `).run('theme', 'default');
-  }
-
-  // Create social links table
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS social_links (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      platform TEXT NOT NULL,
-      label TEXT NOT NULL,
-      url TEXT NOT NULL,
-      icon_svg TEXT,
-      sort_order INTEGER DEFAULT 0,
-      visible BOOLEAN DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Insert default about content if none exists
-  const aboutExists = database.prepare('SELECT COUNT(*) as count FROM about_page').get().count;
-  if (aboutExists === 0) {
-    database.prepare(`
-      INSERT INTO about_page (title, lead_text, content) 
-      VALUES (?, ?, ?)
-    `).run(
-      'About',
-      "I'm a photographer passionate about capturing authentic moments and telling visual stories through my lens.",
-      "My work focuses on the intersection of light, emotion, and time – freezing fleeting moments that might otherwise be forgotten. Each photograph is an invitation to see the world through my eyes, to discover beauty in the ordinary and extraordinary alike.\n\nBased between urban landscapes and natural environments, I find inspiration in the contrast between human-made and organic forms, always seeking to capture the essence of a moment rather than just its appearance."
-    );
-  }
-
-  // Insert default social links if none exist
-  const socialLinksExist = database.prepare('SELECT COUNT(*) as count FROM social_links').get().count;
-  if (socialLinksExist === 0) {
-    const defaultSocialLinks = [
-      {
-        platform: 'instagram',
-        label: 'Instagram',
-        url: 'https://instagram.com/jonsson',
-        icon_svg: 'M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z',
-        sort_order: 1
-      },
-      {
-        platform: 'email',
-        label: 'Email',
-        url: 'mailto:hello@jonsson.io',
-        icon_svg: 'M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.89 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z',
-        sort_order: 2
-      }
-    ];
-
-    const insertSocialLink = database.prepare(`
-      INSERT INTO social_links (platform, label, url, icon_svg, sort_order) 
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    for (const link of defaultSocialLinks) {
-      insertSocialLink.run(link.platform, link.label, link.url, link.icon_svg, link.sort_order);
+export class PhotoDatabase {
+    constructor(db) {
+        this.db = db;
     }
-  }
-  
-  console.log('Database initialized successfully');
-  return database;
+
+    /**
+     * Save photo with EXIF data to database
+     */
+    async savePhoto(photoData) {
+        const {
+            id,
+            filename,
+            b2FileId,
+            b2Filename,
+            url,
+            fileSize,
+            contentType,
+            exifData,
+            location
+        } = photoData;
+
+        const stmt = this.db.prepare(`
+            INSERT INTO photos (
+                id, filename, title, description, b2_file_id, b2_filename, url, file_size, content_type,
+                camera_make, camera_model, camera_software,
+                lens_model, focal_length, aperture,
+                shutter_speed, iso,
+                gps_latitude, gps_longitude, gps_altitude,
+                location_city, location_state, location_country, location_full_address,
+                date_taken
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        await stmt.bind(
+            id,
+            filename,
+            photoData.title || null,
+            photoData.description || null,
+            b2FileId,
+            b2Filename,
+            url,
+            fileSize,
+            contentType,
+            // Camera data
+            exifData?.camera?.make || null,
+            exifData?.camera?.model || null,
+            exifData?.camera?.software || null,
+            // Lens data
+            exifData?.lens?.model || null,
+            exifData?.lens?.focalLength || null,
+            exifData?.lens?.aperture || null,
+            // Settings
+            exifData?.settings?.shutterSpeed || null,
+            exifData?.settings?.iso || null,
+            // GPS
+            exifData?.gps?.latitude || null,
+            exifData?.gps?.longitude || null,
+            exifData?.gps?.altitude || null,
+            // Location
+            location?.city || null,
+            location?.state || null,
+            location?.country || null,
+            location?.fullAddress || null,
+            // Date - ensure it's a valid timestamp format for SQLite
+            exifData?.timestamp ? new Date(exifData.timestamp).toISOString() : null
+        ).run();
+    }
+
+    /**
+     * Get all photos with metadata
+     */
+    async listPhotos(limit = 100) {
+        const stmt = this.db.prepare(`
+            SELECT * FROM photos 
+            ORDER BY upload_date DESC 
+            LIMIT ?
+        `);
+        
+        const result = await stmt.bind(limit).all();
+        
+        return result.results.map(row => this.formatPhotoFromRow(row));
+    }
+
+    /**
+     * Get a single photo by B2 file ID
+     */
+    async getPhotoByB2FileId(b2FileId) {
+        const stmt = this.db.prepare(`
+            SELECT * FROM photos 
+            WHERE b2_file_id = ?
+        `);
+        
+        const result = await stmt.bind(b2FileId).first();
+        
+        return result ? this.formatPhotoFromRow(result) : null;
+    }
+
+    /**
+     * Delete photo from database
+     */
+    async deletePhoto(b2FileId) {
+        const stmt = this.db.prepare(`
+            DELETE FROM photos 
+            WHERE b2_file_id = ?
+        `);
+        
+        await stmt.bind(b2FileId).run();
+    }
+
+    /**
+     * Update EXIF data for existing photo
+     */
+    async updatePhotoExif(b2FileId, exifData, location = null) {
+        const stmt = this.db.prepare(`
+            UPDATE photos SET
+                camera_make = ?, camera_model = ?, camera_software = ?,
+                lens_model = ?, focal_length = ?, aperture = ?,
+                shutter_speed = ?, iso = ?,
+                gps_latitude = ?, gps_longitude = ?, gps_altitude = ?,
+                location_city = ?, location_state = ?, location_country = ?, location_full_address = ?,
+                date_taken = ?
+            WHERE b2_file_id = ?
+        `);
+
+        await stmt.bind(
+            // Camera data
+            exifData?.camera?.make || null,
+            exifData?.camera?.model || null,
+            exifData?.camera?.software || null,
+            // Lens data
+            exifData?.lens?.model || null,
+            exifData?.lens?.focalLength || null,
+            exifData?.lens?.aperture || null,
+            // Settings
+            exifData?.settings?.shutterSpeed || null,
+            exifData?.settings?.iso || null,
+            // GPS
+            exifData?.gps?.latitude || null,
+            exifData?.gps?.longitude || null,
+            exifData?.gps?.altitude || null,
+            // Location
+            location?.city || null,
+            location?.state || null,
+            location?.country || null,
+            location?.fullAddress || null,
+            // Date - ensure it's a valid timestamp format for SQLite
+            exifData?.timestamp ? new Date(exifData.timestamp).toISOString() : null,
+            // Where clause
+            b2FileId
+        ).run();
+    }
+
+    /**
+     * Update photo metadata (title, description)
+     */
+    async updatePhotoMetadata(b2FileId, updates) {
+        // Build dynamic SQL based on which fields are being updated
+        const fields = [];
+        const values = [];
+        
+        if ('title' in updates) {
+            fields.push('title = ?');
+            values.push(updates.title || null);
+        }
+        
+        if ('description' in updates) {
+            fields.push('description = ?');
+            values.push(updates.description || null);
+        }
+        
+        if (fields.length === 0) {
+            throw new Error('No fields to update');
+        }
+        
+        const sql = `UPDATE photos SET ${fields.join(', ')} WHERE b2_file_id = ?`;
+        values.push(b2FileId);
+        
+        const stmt = this.db.prepare(sql);
+        await stmt.bind(...values).run();
+    }
+
+    /**
+     * Format database row into photo object
+     */
+    formatPhotoFromRow(row) {
+        // Priority for title: 1) Manual title, 2) Manual description, 3) Location, 4) Filename
+        let title;
+        
+        if (row.title && row.title.trim()) {
+            // Use manual title if provided (highest priority)
+            title = row.title.trim();
+        } else if (row.description && row.description.trim()) {
+            // Use manual description as title if provided
+            title = row.description.trim();
+        } else if (row.location_city) {
+            // Use city as title
+            title = row.location_city;
+        } else if (row.location_state || row.location_country) {
+            // Use state/country if no city
+            const locationParts = [];
+            if (row.location_state) locationParts.push(row.location_state);
+            if (row.location_country) locationParts.push(row.location_country);
+            title = locationParts.join(', ');
+        } else {
+            // Fallback to filename extraction
+            title = this.extractTitleFromFilename(row.filename);
+        }
+        
+        return {
+            id: row.b2_file_id, // Use B2 file ID as the external ID
+            title: title,
+            description: row.description || '',
+            url: row.url,
+            thumbnail_url: row.url, // Use same URL for now
+            uploadDate: row.upload_date,
+            exif: this.formatExifFromRow(row)
+        };
+    }
+
+    /**
+     * Format EXIF data from database row
+     */
+    formatExifFromRow(row) {
+        const exif = {};
+
+        // Camera info
+        if (row.camera_make || row.camera_model) {
+            exif.camera = {
+                make: row.camera_make || '',
+                model: row.camera_model || '',
+                software: row.camera_software || ''
+            };
+        }
+
+        // Lens info
+        if (row.lens_model || row.focal_length || row.aperture) {
+            exif.lens = {
+                model: row.lens_model || '',
+                focalLength: row.focal_length || '',
+                aperture: row.aperture || ''
+            };
+        }
+
+        // Settings
+        if (row.shutter_speed || row.iso || row.aperture || row.focal_length) {
+            exif.settings = {
+                shutterSpeed: row.shutter_speed || '',
+                iso: row.iso || '',
+                aperture: row.aperture || '',
+                focalLength: row.focal_length || ''
+            };
+        }
+
+        // GPS
+        if (row.gps_latitude || row.gps_longitude || row.gps_altitude) {
+            exif.gps = {
+                latitude: row.gps_latitude,
+                longitude: row.gps_longitude,
+                altitude: row.gps_altitude
+            };
+        }
+
+        // Location
+        if (row.location_city || row.location_state || row.location_country) {
+            exif.location = {
+                city: row.location_city || '',
+                state: row.location_state || '',
+                country: row.location_country || '',
+                fullAddress: row.location_full_address || '',
+                displayName: this.formatLocationDisplay(row)
+            };
+        }
+
+        // Date taken - format for display
+        if (row.date_taken) {
+            try {
+                const date = new Date(row.date_taken);
+                if (!isNaN(date.getTime())) {
+                    exif.dateTaken = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } else {
+                    exif.dateTaken = row.date_taken;
+                }
+            } catch (e) {
+                exif.dateTaken = row.date_taken;
+            }
+        }
+
+        return Object.keys(exif).length > 0 ? exif : null;
+    }
+
+    /**
+     * Format location for display
+     */
+    formatLocationDisplay(row) {
+        const parts = [];
+        
+        if (row.location_city) parts.push(row.location_city);
+        if (row.location_state) parts.push(row.location_state);
+        if (row.location_country) parts.push(row.location_country);
+        
+        return parts.length > 0 ? parts.join(', ') : null;
+    }
+
+    /**
+     * Extract title from filename
+     */
+    extractTitleFromFilename(filename) {
+        // Remove path and extension
+        let name = filename.split('/').pop().split('.')[0];
+        
+        // Remove timestamp patterns (like 20250801T195712-k3j9x2)
+        name = name.replace(/\d{8}T\d{6}-[a-z0-9]+$/g, '');
+        
+        // Clean up extra hyphens
+        name = name.replace(/[-_]+/g, ' ').trim();
+        
+        // Convert to title case
+        return name
+            .replace(/\b\w/g, l => l.toUpperCase())
+            .trim() || 'Untitled';
+    }
 }
