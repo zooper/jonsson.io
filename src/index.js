@@ -1274,7 +1274,7 @@ async function handleUploadProfileImage(request, env) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const uploadResult = await storage.uploadFile(arrayBuffer, fileName, imageFile.type);
         
-        if (!uploadResult.success) {
+        if (!uploadResult || !uploadResult.url) {
             throw new Error('Failed to upload profile image to storage');
         }
         
@@ -1299,26 +1299,12 @@ async function handleUploadProfileImage(request, env) {
 
 async function handleRemoveProfileImage(request, env) {
     try {
-        // Get current profile picture URL
-        const currentProfilePicture = await getSetting(env.DB, 'profile_picture');
-        
-        if (currentProfilePicture) {
-            // Initialize storage for deletion
-            const storage = new B2Storage(env);
-            await storage.authenticate();
-            
-            // Extract filename from URL and attempt to delete
-            try {
-                const fileName = currentProfilePicture.split('/').pop();
-                await storage.deleteFile(fileName);
-            } catch (deleteError) {
-                console.warn('Could not delete profile image from storage:', deleteError);
-                // Continue anyway to remove the setting
-            }
-        }
+        // For now, just remove the setting without deleting from storage
+        // TODO: Implement proper file deletion by storing fileId during upload
+        console.log('Removing profile picture setting (file remains in storage)');
         
         // Remove profile picture setting
-        await setSetting(env.DB, 'profile_picture', null);
+        await setSetting(env.DB, 'profile_picture', '');
         
         return new Response(JSON.stringify({ success: true }), {
             headers: { 'Content-Type': 'application/json' }
