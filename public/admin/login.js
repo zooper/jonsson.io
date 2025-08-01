@@ -15,7 +15,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         
         if (response.ok) {
             localStorage.setItem('adminToken', password);
-            window.location.href = '/admin/dashboard.html';
+            window.location.href = '/admin/dashboard-new.html';
         } else {
             document.getElementById('error').textContent = 'Invalid password';
             document.getElementById('error').style.display = 'block';
@@ -38,7 +38,7 @@ if (token) {
         body: JSON.stringify({ password: token })
     }).then(response => {
         if (response.ok) {
-            window.location.href = '/admin/dashboard.html';
+            window.location.href = '/admin/dashboard-new.html';
         }
     });
 }
