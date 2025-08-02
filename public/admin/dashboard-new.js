@@ -1317,8 +1317,8 @@ async function loadAIStatus() {
 function displayAIStatus(status) {
     const statusBadge = document.getElementById('statusBadge');
     const openaiStatus = document.getElementById('openaiStatus');
-    const quotesCount = document.getElementById('quotesCount');
-    const photosCount = document.getElementById('photosCount');
+    const quotesCount = document.getElementById('aiQuotesCount');
+    const photosCount = document.getElementById('aiPhotosCount');
     
     if (!statusBadge) return;
     
@@ -1372,7 +1372,7 @@ async function updateAllQuotes() {
     if (!updateBtn) return;
     
     // Confirm action since this is a big operation
-    const photoCount = document.getElementById('photosCount')?.textContent || 'unknown';
+    const photoCount = document.getElementById('aiPhotosCount')?.textContent || 'unknown';
     if (!confirm(`This will generate AI quotes for all ${photoCount} photos in your gallery. This may take several minutes. Continue?`)) {
         return;
     }
