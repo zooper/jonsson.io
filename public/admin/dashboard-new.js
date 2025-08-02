@@ -1564,28 +1564,26 @@ async function loadDashboard() {
 
 async function loadDashboardOverview() {
     try {
-        // Load basic stats from existing APIs
-        const [photosResponse, quotesResponse, aiStatusResponse, themesResponse] = await Promise.all([
-            fetch('/admin/api/photos', { headers: { 'Authorization': 'Bearer ' + adminToken } }),
-            fetch('/admin/api/quotes', { headers: { 'Authorization': 'Bearer ' + adminToken } }),
-            fetch('/admin/api/ai-status', { headers: { 'Authorization': 'Bearer ' + adminToken } }),
-            fetch('/admin/api/themes', { headers: { 'Authorization': 'Bearer ' + adminToken } })
-        ]);
+        // Use the new dashboard stats API for faster, direct database queries
+        const response = await fetch('/admin/api/dashboard-stats', {
+            headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
 
-        const photos = photosResponse.ok ? await photosResponse.json() : [];
-        const quotes = quotesResponse.ok ? await quotesResponse.json() : { quotes: [] };
-        const aiStatus = aiStatusResponse.ok ? await aiStatusResponse.json() : null;
-        const themes = themesResponse.ok ? await themesResponse.json() : { currentTheme: 'modern' };
-
-        // Calculate storage usage (estimate)
-        const totalPhotos = Array.isArray(photos) ? photos.length : 0;
-        const estimatedStorage = totalPhotos * 2.5; // Rough estimate: 2.5MB per photo
-
-        // Update overview cards
-        updateOverviewCard('totalPhotos', totalPhotos, 'photos');
-        updateOverviewCard('totalQuotes', quotes.quotes?.length || 0, 'quotes');
-        updateOverviewCard('storageUsed', `${estimatedStorage.toFixed(1)}MB`, 'storage');
-        updateOverviewCard('activeTheme', themes.currentTheme || 'modern', 'theme');
+        if (response.ok) {
+            const stats = await response.json();
+            
+            // Update overview cards with direct stats
+            updateOverviewCard('totalPhotos', stats.photos, 'photos');
+            updateOverviewCard('totalQuotes', stats.quotes, 'quotes');
+            updateOverviewCard('storageUsed', stats.storage, 'storage');
+            updateOverviewCard('activeTheme', stats.theme, 'theme');
+        } else {
+            // Fallback to zeros if API fails
+            updateOverviewCard('totalPhotos', 0, 'photos');
+            updateOverviewCard('totalQuotes', 0, 'quotes');
+            updateOverviewCard('storageUsed', '0.0MB', 'storage');
+            updateOverviewCard('activeTheme', 'modern', 'theme');
+        }
 
     } catch (error) {
         console.error('Error loading dashboard overview:', error);
@@ -1621,34 +1619,57 @@ function updateOverviewCard(id, value, type) {
 
 async function loadRecentActivity() {
     try {
-        // Since we don't have activity logs, we'll generate mock recent activity
-        // In a real system, this would come from an activity log API
-        const activities = [
-            {
-                type: 'upload',
-                title: 'New photos uploaded',
-                time: 'Just now',
-                icon: '📸'
-            },
-            {
-                type: 'quote',
-                title: 'AI quotes generated',
-                time: '2 minutes ago',
-                icon: '🤖'
-            },
-            {
-                type: 'edit',
-                title: 'Photo metadata updated',
-                time: '1 hour ago',
-                icon: '✏️'
-            },
-            {
-                type: 'upload',
-                title: 'Theme changed',
-                time: '3 hours ago',
-                icon: '🎨'
+        // Generate real activity from existing data
+        const activities = [];
+        
+        // Get recent photos (as upload activity)
+        try {
+            const photosResponse = await fetch('/admin/api/photos?limit=5', {
+                headers: { 'Authorization': 'Bearer ' + adminToken }
+            });
+            if (photosResponse.ok) {
+                const photosData = await photosResponse.json();
+                const photos = photosData.photos || photosData;
+                photos.slice(0, 3).forEach(photo => {
+                    activities.push({
+                        type: 'upload',
+                        title: `Photo uploaded: ${photo.title || 'Untitled'}`,
+                        time: formatTimeAgo(photo.upload_date),
+                        icon: '📸'
+                    });
+                });
             }
-        ];
+        } catch (error) {
+            console.error('Error loading recent photos:', error);
+        }
+        
+        // Get recent quotes (as AI activity)
+        try {
+            const quotesResponse = await fetch('/admin/api/quotes?limit=3', {
+                headers: { 'Authorization': 'Bearer ' + adminToken }
+            });
+            if (quotesResponse.ok) {
+                const quotesData = await quotesResponse.json();
+                const quotes = quotesData.quotes || [];
+                quotes.slice(0, 2).forEach(quote => {
+                    activities.push({
+                        type: 'quote',
+                        title: `AI quote generated`,
+                        time: formatTimeAgo(quote.created_date),
+                        icon: '🤖'
+                    });
+                });
+            }
+        } catch (error) {
+            console.error('Error loading recent quotes:', error);
+        }
+        
+        // Sort activities by time (most recent first)
+        activities.sort((a, b) => {
+            const timeA = parseTimeAgo(a.time);
+            const timeB = parseTimeAgo(b.time);
+            return timeA - timeB;
+        });
 
         renderRecentActivity(activities);
     } catch (error) {
@@ -2687,6 +2708,7 @@ function displayCloudflareAnalytics(data) {
     
     // Update overview cards
     updateElement('cfTotalRequests', formatNumber(cf.overview.totalRequests));
+    updateElement('cfUniqueVisitors', formatNumber(cf.overview.totalUniques));
     updateElement('cfBandwidth', cf.overview.bandwidth || '0 Bytes');
     updateElement('cfCacheHitRate', `${cf.overview.cacheHitRate || 0}%`);
     updateElement('cfThreats', formatNumber(cf.overview.threatsStopped));
@@ -2861,13 +2883,45 @@ function formatNumber(num) {
 }
 
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // Handle both YYYY-MM-DD and other date formats
+    // Ensure consistent UTC interpretation to avoid timezone issues
+    const date = new Date(dateString + 'T00:00:00Z');
+    return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        timeZone: 'UTC'
+    });
 }
 
 function updateElement(id, value) {
     const element = document.getElementById(id);
     if (element) element.textContent = value;
+}
+
+function formatTimeAgo(dateString) {
+    if (!dateString) return 'Unknown';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+}
+
+function parseTimeAgo(timeString) {
+    // Simple approximation for sorting - returns minutes ago
+    if (timeString === 'Just now') return 0;
+    if (timeString.includes('minute')) return parseInt(timeString);
+    if (timeString.includes('hour')) return parseInt(timeString) * 60;
+    if (timeString.includes('day')) return parseInt(timeString) * 60 * 24;
+    return 999999; // Very old
 }
 
 // Global variable to store current analytics data for drill-downs
@@ -2893,6 +2947,14 @@ function showRequestsBreakdown() {
     
     const title = 'Request Traffic Breakdown';
     const content = generateRequestsBreakdownContent(currentAnalyticsData);
+    showDrillDownModal(title, content);
+}
+
+function showVisitorsBreakdown() {
+    if (!currentAnalyticsData) return;
+    
+    const title = 'Unique Visitors Breakdown';
+    const content = generateVisitorsBreakdownContent(currentAnalyticsData);
     showDrillDownModal(title, content);
 }
 
@@ -3006,6 +3068,61 @@ function generateRequestsBreakdownContent(data) {
                 <div class="drill-metric">
                     <span class="drill-metric-label">Quality Score</span>
                     <span class="drill-metric-value">${cf.overview.totalRequests > 0 ? Math.round(((cf.overview.totalRequests - cf.overview.threatsStopped) / cf.overview.totalRequests) * 100) : 0}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function generateVisitorsBreakdownContent(data) {
+    const cf = data.cloudflare;
+    const timeline = cf.timeline || [];
+    
+    return `
+        <div class="drill-down-grid">
+            <div class="drill-down-card">
+                <h4>Visitor Summary</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Unique Visitors</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalUniques)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Page Views</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalPageViews)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Pages per Visitor</span>
+                    <span class="drill-metric-value">${cf.overview.totalUniques > 0 ? Math.round((cf.overview.totalPageViews / cf.overview.totalUniques) * 100) / 100 : 0}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Total Requests</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalRequests)}</span>
+                </div>
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Daily Visitors (Last 7 Days)</h4>
+                ${timeline.slice(-7).map(day => `
+                    <div class="drill-metric">
+                        <span class="drill-metric-label">${formatDate(day.date)}</span>
+                        <span class="drill-metric-value">${formatNumber(day.uniques)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Engagement Quality</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Return Visitor Rate</span>
+                    <span class="drill-metric-value">${cf.overview.totalUniques > 0 ? Math.round(((cf.overview.totalRequests - cf.overview.totalUniques) / cf.overview.totalRequests) * 100) : 0}%</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Bounce Rate Indicator</span>
+                    <span class="drill-metric-value">${cf.overview.totalPageViews > 0 && cf.overview.totalUniques > 0 ? (cf.overview.totalPageViews / cf.overview.totalUniques < 1.5 ? 'High' : 'Low') : 'Unknown'}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Visitor Quality</span>
+                    <span class="drill-metric-value">${cf.overview.totalPageViews > 0 && cf.overview.totalUniques > 0 ? (cf.overview.totalPageViews / cf.overview.totalUniques > 2 ? 'Excellent' : cf.overview.totalPageViews / cf.overview.totalUniques > 1.5 ? 'Good' : 'Fair') : 'Unknown'}</span>
                 </div>
             </div>
         </div>
@@ -3315,6 +3432,7 @@ function getCountryCodeFromName(countryName) {
 window.loadCloudflareAnalytics = loadCloudflareAnalytics;
 window.setTimePeriod = setTimePeriod;
 window.showRequestsBreakdown = showRequestsBreakdown;
+window.showVisitorsBreakdown = showVisitorsBreakdown;
 window.showBandwidthBreakdown = showBandwidthBreakdown;
 window.showCacheBreakdown = showCacheBreakdown;
 window.showSecurityBreakdown = showSecurityBreakdown;

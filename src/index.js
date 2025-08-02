@@ -167,6 +167,12 @@ async function handleAdminRequest(request, env, pathname) {
             }
             break;
             
+        case '/admin/api/dashboard-stats':
+            if (request.method === 'GET') {
+                return handleGetDashboardStats(request, env);
+            }
+            break;
+            
             
         case '/admin/api/request-magic-link':
             if (request.method === 'POST') {
@@ -2317,6 +2323,41 @@ async function handleGetAIStatus(request, env) {
         return new Response(JSON.stringify({ 
             error: error.message,
             status: 'error'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// Dashboard Stats Function
+async function handleGetDashboardStats(request, env) {
+    try {
+        // Get total counts directly from database
+        const [photosCount, quotesCount, themesResponse] = await Promise.all([
+            env.DB.prepare('SELECT COUNT(*) as count FROM photos').first(),
+            env.DB.prepare('SELECT COUNT(*) as count FROM ai_quotes').first(),
+            getSetting(env.DB, 'active_theme')
+        ]);
+
+        const totalPhotos = photosCount?.count || 0;
+        const totalQuotes = quotesCount?.count || 0;
+        const estimatedStorage = totalPhotos * 2.5; // Rough estimate: 2.5MB per photo
+        const activeTheme = themesResponse || 'modern';
+
+        return new Response(JSON.stringify({
+            photos: totalPhotos,
+            quotes: totalQuotes,
+            storage: `${estimatedStorage.toFixed(1)}MB`,
+            theme: activeTheme
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error getting dashboard stats:', error);
+        return new Response(JSON.stringify({
+            error: error.message
         }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
