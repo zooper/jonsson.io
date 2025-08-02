@@ -86,7 +86,7 @@ export default {
 };
 
 async function handleAdminRequest(request, env, pathname) {
-    console.log('Admin request:', request.method, pathname);
+    // Admin request received
     
     // Authentication check for API routes (skip magic link endpoints)
     if (pathname.startsWith('/admin/api/') && 
@@ -96,7 +96,6 @@ async function handleAdminRequest(request, env, pathname) {
         const authHeader = request.headers.get('Authorization');
         
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            console.log('Authentication failed: No valid authorization header');
             return new Response('Unauthorized', { status: 401 });
         }
         
@@ -105,10 +104,8 @@ async function handleAdminRequest(request, env, pathname) {
         // JWT validation only
         const isValidJWT = await validateJWT(token, env);
         if (!isValidJWT) {
-            console.log('JWT authentication failed');
             return new Response('Unauthorized', { status: 401 });
         }
-        console.log('JWT authentication passed');
     }
     
     // API routes
@@ -434,18 +431,15 @@ function extractTitleFromFileName(fileName) {
 // Admin API functions - HTML is now served from static files
 
 async function handleAdminUpload(request, env) {
-    console.log('Upload handler called');
     const storage = new B2Storage(env);
     const exifExtractor = new ExifExtractor();
     const photoDb = new PhotoDatabase(env.DB);
     const locationService = new LocationService();
     
     try {
-        console.log('Parsing form data...');
         // Get the uploaded file from FormData
         const formData = await request.formData();
         const file = formData.get('photo');
-        console.log('File extracted from form data:', file ? `${file.name} (${file.size} bytes)` : 'null');
         
         if (!file) {
             return new Response(JSON.stringify({ error: 'No file uploaded' }), {
@@ -462,14 +456,7 @@ async function handleAdminUpload(request, env) {
         const baseFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '-');
         const filename = `photos/${baseFileName}-${timestamp}-${randomSuffix}.${extension}`;
         
-        console.log('Upload details:', {
-            originalName: file.name,
-            baseFileName,
-            timestamp,
-            generatedFilename: filename,
-            fileSize: file.size,
-            fileType: file.type
-        });
+        // Processing upload...
         
         // Convert file to ArrayBuffer
         const fileData = await file.arrayBuffer();
@@ -485,7 +472,7 @@ async function handleAdminUpload(request, env) {
         
         // If no EXIF data, create basic metadata from filename
         if (!exifData || Object.keys(exifData).every(key => !exifData[key])) {
-            console.log('No EXIF data found, using filename-based metadata');
+            // No EXIF data found, using filename-based metadata
             exifData = {
                 camera: {
                     make: 'Unknown',
@@ -526,7 +513,7 @@ async function handleAdminUpload(request, env) {
         let generatedQuote = null;
         
         try {
-            console.log('Generating AI quote for newly uploaded photo:', photoId);
+            // Generating AI quote for newly uploaded photo
             
             const photo = {
                 id: photoId,
@@ -547,7 +534,7 @@ async function handleAdminUpload(request, env) {
                 
                 quoteGenerated = true;
                 generatedQuote = quote;
-                console.log('AI quote generated and saved for photo:', photoId);
+                // AI quote generated and saved
             }
         } catch (quoteError) {
             // Don't fail the upload if quote generation fails
@@ -1842,7 +1829,7 @@ async function handleRemoveProfileImage(request, env) {
     try {
         // For now, just remove the setting without deleting from storage
         // TODO: Implement proper file deletion by storing fileId during upload
-        console.log('Removing profile picture setting (file remains in storage)');
+        // Removing profile picture setting (file remains in storage)
         
         // Remove profile picture setting
         await setSetting(env.DB, 'profile_picture', '');
@@ -2439,7 +2426,7 @@ async function handleUpdateAllQuotes(request, env) {
         // Process each photo individually to generate contextual quotes
         for (const photo of allPhotos) {
             try {
-                console.log(`Generating quote for photo: ${photo.title || photo.id}`);
+                // Generating quote for photo
                 
                 // Generate AI quote specifically based on THIS photo's content and metadata
                 const quote = await generateAIQuote(photo, env);
@@ -3473,8 +3460,6 @@ async function getVisitorAnalyticsFromDB(env, period) {
 }
 
 function calculateCloudflareOverview(timelineData) {
-    console.log('calculateCloudflareOverview input:', timelineData);
-    
     if (!timelineData || timelineData.length === 0) {
         return {
             totalRequests: 0,
@@ -3488,7 +3473,6 @@ function calculateCloudflareOverview(timelineData) {
     }
     
     const totals = timelineData.reduce((acc, day) => {
-        console.log('Processing day:', day);
         acc.requests += day.sum.requests || 0;
         acc.bytes += day.sum.bytes || 0;
         acc.pageViews += day.sum.pageViews || 0;
@@ -3505,11 +3489,9 @@ function calculateCloudflareOverview(timelineData) {
         uniques: 0
     });
     
-    console.log('Calculated totals:', totals);
-    
     const cacheHitRate = totals.requests > 0 ? (totals.cachedRequests / totals.requests * 100) : 0;
     
-    const result = {
+    return {
         totalRequests: totals.requests,
         totalBytes: totals.bytes,
         totalPageViews: totals.pageViews,
@@ -3518,9 +3500,6 @@ function calculateCloudflareOverview(timelineData) {
         threatsStopped: totals.threats,
         bandwidth: formatBytes(totals.bytes)
     };
-    
-    console.log('Overview result:', result);
-    return result;
 }
 
 function formatTimelineData(timelineData) {
@@ -3546,9 +3525,7 @@ function formatGeographicData(timelineData) {
     
     timelineData.forEach(day => {
         if (day.sum.countryMap && Array.isArray(day.sum.countryMap)) {
-            console.log('Country data from Cloudflare:', day.sum.countryMap);
             day.sum.countryMap.forEach(countryData => {
-                console.log('Individual country entry:', countryData);
                 const country = countryData.clientCountryName || 'Unknown';
                 if (countryMap.has(country)) {
                     const existing = countryMap.get(country);

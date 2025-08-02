@@ -636,7 +636,6 @@ async function rescanExif(photoId) {
         
         if (response.ok) {
             const result = await response.json();
-            console.log('EXIF rescan result:', result);
             
             if (result.exifData) {
                 const foundItems = [];
@@ -693,7 +692,6 @@ async function bulkRescanExif() {
         
         if (response.ok) {
             const result = await response.json();
-            console.log('Bulk EXIF rescan result:', result);
             
             let successCount = 0;
             let foundExifCount = 0;
@@ -714,8 +712,7 @@ async function bulkRescanExif() {
             }
             
             if (result.errors && result.errors.length > 0) {
-                console.log('EXIF rescan errors:', result.errors);
-                toast.warning('Some Errors', 'Some photos had errors. Check console for details.');
+                toast.warning('Some Errors', `Some photos had errors during EXIF scanning.`);
             }
             
             // Clear selection and refresh
@@ -888,7 +885,7 @@ async function loadSiteSettings() {
             const settings = await response.json();
             populateSettingsForm(settings);
         } else {
-            console.log('No site settings found, using defaults');
+            // No site settings found, using defaults
         }
     } catch (error) {
         console.error('Error loading site settings:', error);
@@ -1068,7 +1065,7 @@ async function loadCurrentHeroQuote() {
             const data = await response.json();
             displayHeroQuote(data);
         } else {
-            console.log('No current hero quote found, using default');
+            // No current hero quote found, using default
             displayHeroQuote({
                 quote: "Every photograph is a window into a moment that will never happen again",
                 photo: null,
@@ -1349,18 +1346,10 @@ async function updateAllQuotes() {
                 `Generated ${result.generated} ${aiText} quotes for ${result.total} photos! Your homepage now has maximum variety.`
             );
             
-            // Show sample results in console for debugging
-            console.log('Bulk quote update results:', result);
-            
-            if (result.sampleResults && result.sampleResults.length > 0) {
-                console.log('Sample generated quotes:', result.sampleResults);
-            }
-            
             if (result.errors > 0) {
                 toast.warning('Some Errors', 
-                    `${result.errors} photos had errors. Check console for details.`
+                    `${result.errors} photos had errors during quote generation.`
                 );
-                console.error('Quote generation errors:', result.errorDetails);
             }
             
             // Reload status and current quote
@@ -2629,9 +2618,7 @@ function showCloudflareError(message) {
 }
 
 function displayCloudflareAnalytics(data) {
-    console.log('Cloudflare analytics data:', data);
     const cf = data.cloudflare;
-    console.log('Cloudflare overview:', cf.overview);
     
     // Store data for drill-downs
     currentAnalyticsData = data;
