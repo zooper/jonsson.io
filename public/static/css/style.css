@@ -422,6 +422,27 @@ body {
     position: relative;
 }
 
+/* Enhanced featured image styles */
+.hero-featured img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transition: transform 0.3s ease;
+    border-radius: inherit;
+}
+
+.hero-featured:hover img {
+    transform: scale(1.02);
+}
+
+/* Ensure proper aspect ratio handling for all image orientations */
+@media (max-width: 768px) {
+    .hero-featured {
+        aspect-ratio: 1;
+    }
+}
+
 .featured-placeholder {
     width: 100%;
     height: 100%;
@@ -1055,12 +1076,73 @@ body {
         grid-template-columns: 1fr 1fr;
     }
     
-    .contact-methods {
-        flex-direction: row;
+    .contact-section .contact-methods {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: center;
+        align-items: center;
+        gap: 2rem;
+        flex-wrap: wrap;
     }
     
-    .contact-method {
-        flex: 1;
+    .contact-section .contact-method {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0;
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        font-size: 1rem;
+        color: var(--text-primary);
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+    
+    .contact-section .contact-method:hover {
+        color: var(--primary-color, var(--accent-primary));
+        transform: none;
+        box-shadow: none;
+    }
+    
+    .contact-section .contact-method .method-icon {
+        width: 20px;
+        height: 20px;
+        background: none;
+        border-radius: 0;
+        color: var(--primary-color, var(--accent-primary));
+        transition: all 0.3s ease;
+    }
+    
+    .contact-section .contact-method .method-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
+    }
+    
+    .contact-section .contact-method:hover .method-icon {
+        color: var(--primary-dark, var(--accent-secondary));
+    }
+    
+    .contact-section .contact-method .method-content {
+        display: contents;
+    }
+    
+    .contact-section .contact-method .method-label {
+        display: none;
+    }
+    
+    .contact-section .contact-method .method-value {
+        font-size: 1rem;
+        font-weight: 500;
+    }
+    
+    /* Add divider between contact methods */
+    .contact-section .contact-method:not(:last-child)::after {
+        content: "|";
+        margin-left: 2rem;
+        color: var(--text-muted);
+        font-weight: 300;
     }
     
     .loading-grid {

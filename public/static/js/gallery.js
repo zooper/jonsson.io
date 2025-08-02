@@ -435,17 +435,46 @@ class PhotoGallery {
         if (index < this.photos.length - 1) this.preloadImage(index + 1);
     }
     
-    preloadFeaturedImage() {
+    async preloadFeaturedImage() {
+        // Check for AI-generated hero quote with featured image first
+        try {
+            const response = await fetch('/api/hero-quote');
+            if (response.ok) {
+                const data = await response.json();
+                this.updateHeroSection(data);
+                return; // Exit early if AI quote system is working
+            }
+        } catch (error) {
+            console.log('AI quote not available, using fallback featured image');
+        }
+        
+        // Fallback to first photo if AI quote system isn't available
         if (this.photos.length > 0) {
             const featuredContainer = document.getElementById('hero-featured');
             if (featuredContainer) {
                 const featured = this.photos[0];
                 featuredContainer.innerHTML = `
                     <img src="${featured.thumbnail_url || featured.url}" 
-                         alt="${featured.title || 'Featured photo'}"
-                         style="width: 100%; height: 100%; object-fit: cover; border-radius: inherit;">
+                         alt="${featured.title || 'Featured photo'}">
                 `;
             }
+        }
+    }
+    
+    updateHeroSection(data) {
+        // Update quote
+        const heroQuote = document.getElementById('heroQuote');
+        if (heroQuote && data.quote) {
+            heroQuote.textContent = `"${data.quote}"`;
+        }
+        
+        // Update featured image
+        const heroFeaturedPlaceholder = document.getElementById('heroFeaturedPlaceholder');
+        if (heroFeaturedPlaceholder && data.photo) {
+            heroFeaturedPlaceholder.innerHTML = `<img src="${data.photo.url}" alt="${data.photo.title || 'Featured image'}">`;
+        } else if (heroFeaturedPlaceholder) {
+            // Keep the pulse loader if no featured image
+            heroFeaturedPlaceholder.innerHTML = '<div class="pulse-loader"></div>';
         }
     }
     

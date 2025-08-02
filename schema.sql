@@ -42,7 +42,29 @@ CREATE TABLE IF NOT EXISTS photos (
   content_type TEXT
 );
 
+-- Settings table for storing site configuration
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default theme
+INSERT OR IGNORE INTO settings (key, value) VALUES ('active_theme', 'modern');
+
+-- AI Quotes table for storing generated quotes with associated images
+CREATE TABLE IF NOT EXISTS ai_quotes (
+  id TEXT PRIMARY KEY,
+  photo_id TEXT NOT NULL,
+  quote TEXT NOT NULL,
+  is_active INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
+);
+
 -- Index for faster queries
 CREATE INDEX IF NOT EXISTS idx_photos_upload_date ON photos(upload_date);
 CREATE INDEX IF NOT EXISTS idx_photos_camera_make ON photos(camera_make);
 CREATE INDEX IF NOT EXISTS idx_photos_b2_file_id ON photos(b2_file_id);
+CREATE INDEX IF NOT EXISTS idx_ai_quotes_photo_id ON ai_quotes(photo_id);
+CREATE INDEX IF NOT EXISTS idx_ai_quotes_active ON ai_quotes(is_active);

@@ -150,6 +150,7 @@ function switchSection(sectionName) {
     // Update page title
     const titles = {
         photos: 'Photos',
+        quotes: 'AI Quotes',
         themes: 'Themes',
         dashboard: 'Dashboard',
         visitors: 'Visitors',
@@ -176,11 +177,16 @@ function loadSectionData(sectionName) {
         case 'photos':
             loadPhotos();
             break;
+        case 'quotes':
+            loadQuotes();
+            break;
         case 'themes':
             loadThemes();
             break;
         case 'settings':
             loadSiteSettings();
+            loadCurrentHeroQuote();
+            loadAIStatus();
             break;
         case 'dashboard':
         case 'visitors':
@@ -340,7 +346,14 @@ async function handleFiles(files) {
         uploadStatus.innerHTML = `Uploading ${i + 1} of ${files.length}: ${file.name}`;
         
         try {
-            await uploadFile(file);
+            const result = await uploadFile(file);
+            
+            // Show quote generation status
+            if (result.quoteGenerated) {
+                uploadStatus.innerHTML += `<br>🤖 AI quote generated for ${file.name}`;
+            } else {
+                uploadStatus.innerHTML += `<br>📝 Photo uploaded (quote generation failed)`;
+            }
         } catch (error) {
             console.error('Upload failed:', error);
             uploadStatus.innerHTML += `<br>❌ Failed: ${file.name}`;
@@ -349,6 +362,16 @@ async function handleFiles(files) {
     
     uploadProgress.style.display = 'none';
     uploadStatus.innerHTML += '<br>✅ Upload complete!';
+    
+    // Show toast notification with quote generation summary
+    const quotesGenerated = uploadStatus && uploadStatus.innerHTML.includes('🤖 AI quote generated');
+    
+    if (quotesGenerated) {
+        toast.success('Upload Complete', 'Photos uploaded and AI quotes generated automatically!');
+    } else {
+        toast.info('Upload Complete', 'Photos uploaded successfully');
+    }
+    
     loadPhotos();
 }
 
@@ -974,4 +997,440 @@ async function saveContactSettings() {
         console.error('Save contact settings failed:', error);
         toast.error('Save Failed', error.message);
     }
+}
+
+// Hero Quote Management Functions
+async function loadCurrentHeroQuote() {
+    try {
+        const response = await fetch('/api/hero-quote');
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayHeroQuote(data);
+        } else {
+            console.log('No current hero quote found, using default');
+            displayHeroQuote({
+                quote: "Every photograph is a window into a moment that will never happen again",
+                photo: null,
+                lastUpdated: null
+            });
+        }
+    } catch (error) {
+        console.error('Error loading current hero quote:', error);
+        toast.error('Error', 'Failed to load current hero quote');
+    }
+}
+
+function displayHeroQuote(data) {
+    const heroImagePreview = document.getElementById('heroImagePreview');
+    const heroQuoteText = document.getElementById('heroQuoteText');
+    const heroQuoteMeta = document.getElementById('heroQuoteMeta');
+    
+    // Update quote text
+    if (heroQuoteText) {
+        heroQuoteText.textContent = `"${data.quote}"`;
+    }
+    
+    // Update image preview
+    if (heroImagePreview && data.photo) {
+        heroImagePreview.innerHTML = `<img src="${data.photo.url}" alt="${data.photo.title || 'Featured image'}">`;
+    } else if (heroImagePreview) {
+        heroImagePreview.innerHTML = `
+            <div class="image-placeholder">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9 2l3 3h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h3zm3 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                </svg>
+                <p>Default quote (no featured image)</p>
+            </div>
+        `;
+    }
+    
+    // Update meta information
+    if (heroQuoteMeta) {
+        if (data.lastUpdated) {
+            const lastUpdated = new Date(data.lastUpdated).toLocaleString();
+            heroQuoteMeta.innerHTML = `<span class="last-updated">Last updated: ${lastUpdated}</span>`;
+        } else {
+            heroQuoteMeta.innerHTML = `<span class="last-updated">Using default quote</span>`;
+        }
+    }
+}
+
+async function refreshHeroQuote() {
+    const refreshBtn = document.querySelector('button[onclick="refreshHeroQuote()"]');
+    
+    if (!refreshBtn) return;
+    
+    // Show loading state
+    const originalText = refreshBtn.innerHTML;
+    refreshBtn.disabled = true;
+    refreshBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 6v6l4 2"></path>
+        </svg>
+        Generating...
+    `;
+    
+    try {
+        toast.info('Processing', 'Generating new AI quote based on random photo...', 0);
+        
+        const response = await fetch('/admin/api/refresh-hero-quote', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Display the new quote and update status
+            displayHeroQuote(result);
+            await loadAIStatus();
+            
+            // Show success notification
+            const aiGenerated = result.quote !== "Every photograph is a window into a moment that will never happen again";
+            if (aiGenerated) {
+                toast.success('Quote Generated', 'New AI-generated quote is now active on your homepage!');
+            } else {
+                toast.info('Fallback Quote', 'Generated a new quote using fallback system.');
+            }
+            
+        } else {
+            const error = await response.json();
+            toast.error('Generation Failed', error.message || 'Failed to generate new quote');
+        }
+        
+    } catch (error) {
+        console.error('Error refreshing hero quote:', error);
+        toast.error('Generation Failed', error.message);
+    } finally {
+        // Restore button state
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = originalText;
+    }
+}
+
+async function setupAIQuotes() {
+    const setupBtn = document.querySelector('button[onclick="setupAIQuotes()"]');
+    
+    if (!setupBtn) return;
+    
+    // Show loading state
+    const originalText = setupBtn.innerHTML;
+    setupBtn.disabled = true;
+    setupBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 6v6l4 2"></path>
+        </svg>
+        Setting up...
+    `;
+    
+    try {
+        toast.info('Setting Up', 'Initializing AI quotes database and generating first quote...', 0);
+        
+        const response = await fetch('/admin/api/migrate-ai-quotes', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Show success notification
+            toast.success('Setup Complete', 'AI quotes system is now ready to use!');
+            
+            // Reload the current hero quote and status
+            await loadCurrentHeroQuote();
+            await loadAIStatus();
+            
+        } else {
+            const error = await response.json();
+            toast.error('Setup Failed', error.message || 'Failed to setup AI quotes');
+        }
+        
+    } catch (error) {
+        console.error('Error setting up AI quotes:', error);
+        toast.error('Setup Failed', error.message);
+    } finally {
+        // Restore button state
+        setupBtn.disabled = false;
+        setupBtn.innerHTML = originalText;
+    }
+}
+
+// AI Status Management Functions
+async function loadAIStatus() {
+    try {
+        const response = await fetch('/admin/api/ai-status', {
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (response.ok) {
+            const status = await response.json();
+            displayAIStatus(status);
+        } else {
+            console.error('Failed to load AI status');
+            displayAIStatus({
+                status: 'error',
+                openai: { configured: false, working: false },
+                database: { quotes: 0, photos: 0 }
+            });
+        }
+    } catch (error) {
+        console.error('Error loading AI status:', error);
+        displayAIStatus({
+            status: 'error',
+            openai: { configured: false, working: false },
+            database: { quotes: 0, photos: 0 }
+        });
+    }
+}
+
+function displayAIStatus(status) {
+    const statusBadge = document.getElementById('statusBadge');
+    const openaiStatus = document.getElementById('openaiStatus');
+    const quotesCount = document.getElementById('quotesCount');
+    const photosCount = document.getElementById('photosCount');
+    
+    if (!statusBadge) return;
+    
+    // Update main status badge
+    statusBadge.className = 'status-badge ' + status.status;
+    
+    const statusMessages = {
+        'ai_active': { icon: '🤖', text: 'AI Active' },
+        'quotes_available': { icon: '💬', text: 'Quotes Available' },
+        'fallback_only': { icon: '📝', text: 'Fallback Only' },
+        'error': { icon: '❌', text: 'Error' }
+    };
+    
+    const statusInfo = statusMessages[status.status] || { icon: '❓', text: 'Unknown' };
+    statusBadge.innerHTML = `
+        <div class="status-icon">${statusInfo.icon}</div>
+        <span>${statusInfo.text}</span>
+    `;
+    
+    // Update detailed status
+    if (openaiStatus) {
+        if (status.openai.configured) {
+            if (status.openai.working) {
+                openaiStatus.innerHTML = '<span class="success">✓ Working</span>';
+            } else {
+                openaiStatus.innerHTML = '<span class="error">✗ Error</span>';
+                if (status.openai.error) {
+                    openaiStatus.title = status.openai.error;
+                }
+            }
+        } else {
+            openaiStatus.innerHTML = '<span class="warning">Not Configured</span>';
+        }
+    }
+    
+    if (quotesCount) {
+        quotesCount.textContent = status.database.quotes || 0;
+        quotesCount.className = status.database.quotes > 0 ? 'success' : 'warning';
+    }
+    
+    if (photosCount) {
+        photosCount.textContent = status.database.photos || 0;
+        photosCount.className = status.database.photos > 0 ? 'success' : 'error';
+    }
+}
+
+// Bulk Quote Update Function
+async function updateAllQuotes() {
+    const updateBtn = document.querySelector('button[onclick="updateAllQuotes()"]');
+    
+    if (!updateBtn) return;
+    
+    // Confirm action since this is a big operation
+    const photoCount = document.getElementById('photosCount')?.textContent || 'unknown';
+    if (!confirm(`This will generate AI quotes for all ${photoCount} photos in your gallery. This may take several minutes. Continue?`)) {
+        return;
+    }
+    
+    // Show loading state
+    const originalText = updateBtn.innerHTML;
+    updateBtn.disabled = true;
+    updateBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 6v6l4 2"></path>
+        </svg>
+        Processing...
+    `;
+    
+    try {
+        toast.info('Processing', `Generating personalized AI quotes for all photos. This may take several minutes...`, 0);
+        
+        const response = await fetch('/admin/api/update-all-quotes', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Show detailed success notification
+            const aiText = result.usingAI ? 'AI-generated' : 'fallback';
+            toast.success('Bulk Update Complete', 
+                `Generated ${result.generated} ${aiText} quotes for ${result.total} photos! Your homepage now has maximum variety.`
+            );
+            
+            // Show sample results in console for debugging
+            console.log('Bulk quote update results:', result);
+            
+            if (result.sampleResults && result.sampleResults.length > 0) {
+                console.log('Sample generated quotes:', result.sampleResults);
+            }
+            
+            if (result.errors > 0) {
+                toast.warning('Some Errors', 
+                    `${result.errors} photos had errors. Check console for details.`
+                );
+                console.error('Quote generation errors:', result.errorDetails);
+            }
+            
+            // Reload status and current quote
+            await loadCurrentHeroQuote();
+            await loadAIStatus();
+            
+        } else {
+            const error = await response.json();
+            toast.error('Bulk Update Failed', error.message || 'Failed to update all quotes');
+        }
+        
+    } catch (error) {
+        console.error('Error updating all quotes:', error);
+        toast.error('Bulk Update Failed', error.message);
+    } finally {
+        // Restore button state
+        updateBtn.disabled = false;
+        updateBtn.innerHTML = originalText;
+    }
+}
+
+// Quotes Management Functions
+async function loadQuotes() {
+    try {
+        const response = await fetch('/admin/api/quotes', {
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load quotes');
+        }
+        
+        const data = await response.json();
+        renderQuotes(data.quotes || []);
+        updateQuotesCount(data.total || 0);
+    } catch (error) {
+        console.error('Failed to load quotes:', error);
+        document.getElementById('quotesGrid').innerHTML = '<div class="loading">Failed to load quotes</div>';
+    }
+}
+
+function updateQuotesCount(count) {
+    const quotesCountEl = document.getElementById('quotesCount');
+    if (quotesCountEl) {
+        quotesCountEl.textContent = count;
+    }
+}
+
+function renderQuotes(quotes) {
+    const grid = document.getElementById('quotesGrid');
+    
+    if (quotes.length === 0) {
+        grid.innerHTML = '<div class="loading">No quotes found. Run "Update All Quotes" to generate quotes for your photos.</div>';
+        return;
+    }
+    
+    grid.innerHTML = quotes.map(quote => `
+        <div class="quote-card" data-quote-id="${quote.quote_id}">
+            <div class="quote-image">
+                <img src="${quote.photo_thumbnail || quote.photo_url}" alt="${quote.photo_title || 'Photo'}" loading="lazy">
+            </div>
+            <div class="quote-content">
+                <div class="quote-meta">
+                    <h3 class="photo-title">${quote.photo_title || 'Untitled'}</h3>
+                    <p class="photo-description">${quote.photo_description || 'No description'}</p>
+                    <span class="quote-date">Generated: ${new Date(quote.created_at).toLocaleDateString()}</span>
+                </div>
+                <div class="quote-text-container">
+                    <label for="quote-${quote.quote_id}">AI Quote:</label>
+                    <textarea 
+                        id="quote-${quote.quote_id}" 
+                        class="quote-textarea"
+                        rows="3"
+                        placeholder="Enter quote..."
+                    >${quote.quote}</textarea>
+                </div>
+                <div class="quote-actions">
+                    <button class="btn btn-primary" onclick="updateQuote('${quote.quote_id}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+                            <polyline points="17,21 17,13 7,13 7,21"></polyline>
+                            <polyline points="7,3 7,8 15,8"></polyline>
+                        </svg>
+                        Save Quote
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function updateQuote(quoteId) {
+    const textarea = document.getElementById(`quote-${quoteId}`);
+    if (!textarea) return;
+    
+    const newQuote = textarea.value.trim();
+    if (!newQuote) {
+        toast.error('Invalid Quote', 'Quote cannot be empty');
+        return;
+    }
+    
+    try {
+        toast.info('Saving', 'Updating quote...', 0);
+        
+        const response = await fetch('/admin/api/quotes/update', {
+            method: 'PUT',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                quoteId: quoteId,
+                quote: newQuote
+            })
+        });
+        
+        if (response.ok) {
+            toast.success('Quote Updated', 'Quote has been successfully updated');
+        } else {
+            const error = await response.json();
+            toast.error('Update Failed', error.message || 'Failed to update quote');
+        }
+    } catch (error) {
+        console.error('Error updating quote:', error);
+        toast.error('Update Failed', error.message);
+    }
+}
+
+function refreshQuotesList() {
+    loadQuotes();
 }

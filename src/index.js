@@ -100,6 +100,18 @@ async function handleAdminRequest(request, env, pathname) {
             }
             break;
             
+        case '/admin/api/migrate-ai-quotes':
+            if (request.method === 'POST') {
+                return handleMigrateAIQuotes(request, env);
+            }
+            break;
+            
+        case '/admin/api/ai-status':
+            if (request.method === 'GET') {
+                return handleGetAIStatus(request, env);
+            }
+            break;
+            
         case '/admin/api/auth':
             if (request.method === 'POST') {
                 return handleAdminAuth(request, env);
@@ -141,6 +153,30 @@ async function handleAdminRequest(request, env, pathname) {
         case '/admin/api/remove-profile-image':
             if (request.method === 'DELETE') {
                 return handleRemoveProfileImage(request, env);
+            }
+            break;
+            
+        case '/admin/api/refresh-hero-quote':
+            if (request.method === 'POST') {
+                return handleRefreshHeroQuote(request, env);
+            }
+            break;
+            
+        case '/admin/api/update-all-quotes':
+            if (request.method === 'POST') {
+                return handleUpdateAllQuotes(request, env);
+            }
+            break;
+            
+        case '/admin/api/quotes':
+            if (request.method === 'GET') {
+                return handleGetAllQuotes(request, env);
+            }
+            break;
+            
+        case '/admin/api/quotes/update':
+            if (request.method === 'PUT') {
+                return handleUpdateQuote(request, env);
             }
             break;
     }
@@ -186,6 +222,9 @@ async function handleApiRequest(request, env, pathname) {
                 
             case '/api/site-settings':
                 return handleGetPublicSiteSettings(request, env);
+                
+            case '/api/hero-quote':
+                return handleGetCurrentHeroQuote(request, env);
             
             default:
                 return new Response('API endpoint not found', { status: 404 });
@@ -367,8 +406,9 @@ async function handleAdminUpload(request, env) {
         }
         
         // Save photo metadata and EXIF to database
+        const photoId = crypto.randomUUID();
         await photoDb.savePhoto({
-            id: crypto.randomUUID(),
+            id: photoId,
             filename: file.name,
             b2FileId: uploadResult.fileId,
             b2Filename: uploadResult.fileName,
@@ -379,12 +419,47 @@ async function handleAdminUpload(request, env) {
             location: location
         });
         
+        // Automatically generate AI quote for the newly uploaded photo
+        let quoteGenerated = false;
+        let generatedQuote = null;
+        
+        try {
+            console.log('Generating AI quote for newly uploaded photo:', photoId);
+            
+            const photo = {
+                id: photoId,
+                url: uploadResult.url,
+                title: extractTitleFromFileName(file.name),
+                description: null // New uploads don't have descriptions yet
+            };
+            
+            const quote = await generateAIQuote(photo, env);
+            
+            if (quote) {
+                // Save the AI-generated quote
+                const quoteId = crypto.randomUUID();
+                await env.DB.prepare(`
+                    INSERT INTO ai_quotes (id, photo_id, quote, is_active, created_at)
+                    VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP)
+                `).bind(quoteId, photoId, quote).run();
+                
+                quoteGenerated = true;
+                generatedQuote = quote;
+                console.log('AI quote generated and saved for photo:', photoId);
+            }
+        } catch (quoteError) {
+            // Don't fail the upload if quote generation fails
+            console.error('Failed to generate quote for uploaded photo:', quoteError);
+        }
+        
         return new Response(JSON.stringify({
             success: true,
             filename: uploadResult.fileName,
             url: uploadResult.url,
             fileId: uploadResult.fileId,
-            message: 'Photo uploaded successfully'
+            message: 'Photo uploaded successfully',
+            quoteGenerated: quoteGenerated,
+            aiQuote: generatedQuote
         }), {
             headers: { 'Content-Type': 'application/json' }
         });
@@ -801,6 +876,35 @@ async function handleAdminMigrate(request, env) {
             } else {
                 throw error;
             }
+        }
+        
+        // Create AI quotes table
+        try {
+            await env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS ai_quotes (
+                    id TEXT PRIMARY KEY,
+                    photo_id TEXT NOT NULL,
+                    quote TEXT NOT NULL,
+                    is_active INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
+                )
+            `).run();
+            migrations.push('Created ai_quotes table');
+        } catch (error) {
+            if (!error.message.includes('already exists')) {
+                throw error;
+            }
+            migrations.push('AI quotes table already exists');
+        }
+        
+        // Create indexes for ai_quotes table
+        try {
+            await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ai_quotes_photo_id ON ai_quotes(photo_id)').run();
+            await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ai_quotes_active ON ai_quotes(is_active)').run();
+            migrations.push('Created AI quotes indexes');
+        } catch (error) {
+            migrations.push('AI quotes indexes already exist or failed to create');
         }
         
         return new Response(JSON.stringify({
@@ -1364,6 +1468,604 @@ async function handleGetPublicSiteSettings(request, env) {
     } catch (error) {
         console.error('Error getting public site settings:', error);
         return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// AI Quote Management Functions
+async function handleGetCurrentHeroQuote(request, env) {
+    try {
+        // Check if we have any AI quotes available
+        const quoteCount = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_quotes').first();
+        
+        if (quoteCount.count > 0) {
+            // Get a random image-quote pair from existing AI quotes
+            // Each image has its own specific quote, we randomly select which pair to show
+            const randomQuote = await env.DB.prepare(`
+                SELECT 
+                    aq.id as quote_id,
+                    aq.quote,
+                    aq.created_at,
+                    p.id as photo_id,
+                    p.url as photo_url,
+                    p.title as photo_title,
+                    p.description as photo_description
+                FROM ai_quotes aq
+                JOIN photos p ON aq.photo_id = p.id
+                ORDER BY RANDOM()
+                LIMIT 1
+            `).first();
+
+            if (randomQuote) {
+                return new Response(JSON.stringify({
+                    quote: randomQuote.quote,
+                    photo: {
+                        id: randomQuote.photo_id,
+                        url: randomQuote.photo_url,
+                        title: randomQuote.photo_title,
+                        description: randomQuote.photo_description
+                    },
+                    lastUpdated: randomQuote.created_at,
+                    isAI: true,
+                    source: 'ai_generated'
+                }), {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache' // Don't cache so it's random on each reload
+                    }
+                });
+            }
+        }
+        
+        // If no AI quotes available, generate one on-the-fly or use fallback
+        const photos = await env.DB.prepare('SELECT COUNT(*) as count FROM photos').first();
+        
+        if (photos.count > 0) {
+            // Try to generate a new quote on-the-fly for a random photo
+            const randomPhoto = await env.DB.prepare(`
+                SELECT id, url, title, description
+                FROM photos
+                ORDER BY RANDOM()
+                LIMIT 1
+            `).first();
+            
+            if (randomPhoto) {
+                // Try to generate AI quote
+                const quote = await generateAIQuote(randomPhoto, env);
+                
+                return new Response(JSON.stringify({
+                    quote: quote,
+                    photo: {
+                        id: randomPhoto.id,
+                        url: randomPhoto.url,
+                        title: randomPhoto.title,
+                        description: randomPhoto.description
+                    },
+                    lastUpdated: new Date().toISOString(),
+                    isAI: env.OPENAI_API_KEY ? true : false,
+                    source: env.OPENAI_API_KEY ? 'ai_live' : 'fallback'
+                }), {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+            }
+        }
+        
+        // Final fallback to default quote with no photo
+        return new Response(JSON.stringify({
+            quote: "Every photograph is a window into a moment that will never happen again",
+            photo: null,
+            lastUpdated: null,
+            isAI: false,
+            source: 'default'
+        }), {
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error getting current hero quote:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function handleRefreshHeroQuote(request, env) {
+    try {
+        // Get a random photo from the gallery
+        const randomPhoto = await env.DB.prepare(`
+            SELECT id, url, title, description
+            FROM photos
+            ORDER BY RANDOM()
+            LIMIT 1
+        `).first();
+
+        if (!randomPhoto) {
+            return new Response(JSON.stringify({ error: 'No photos available for quote generation' }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Generate AI quote based on the image
+        const quote = await generateAIQuote(randomPhoto, env);
+        
+        if (!quote) {
+            return new Response(JSON.stringify({ error: 'Failed to generate AI quote' }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Deactivate all existing quotes
+        await env.DB.prepare('UPDATE ai_quotes SET is_active = 0').run();
+
+        // Save the new quote
+        const quoteId = crypto.randomUUID();
+        await env.DB.prepare(`
+            INSERT INTO ai_quotes (id, photo_id, quote, is_active, created_at)
+            VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+        `).bind(quoteId, randomPhoto.id, quote).run();
+
+        return new Response(JSON.stringify({
+            success: true,
+            quote: quote,
+            photo: {
+                id: randomPhoto.id,
+                url: randomPhoto.url,
+                title: randomPhoto.title,
+                description: randomPhoto.description
+            },
+            message: 'Hero quote refreshed successfully'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error refreshing hero quote:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function generateAIQuote(photo, env) {
+    try {
+        // Check if OpenAI API key is available
+        if (!env.OPENAI_API_KEY) {
+            console.warn('OpenAI API key not configured, using fallback quote');
+            return generateFallbackQuote(photo);
+        }
+
+        // Prepare the prompt for OpenAI Vision model based on actual image content
+        const imageUrl = photo.url;
+        let prompt = 'Analyze this photograph and generate an inspiring, poetic quote that captures what you see in the image. ';
+        
+        if (photo.title) {
+            prompt += `The photo is titled "${photo.title}". `;
+        }
+        
+        if (photo.description) {
+            prompt += `Additional context: ${photo.description}. `;
+        }
+        
+        prompt += 'The quote should be 1-2 sentences, thoughtful, and relate directly to what you observe in the image - the mood, composition, subject matter, lighting, or story it tells. Make it unique and memorable, avoiding generic photography clichés.';
+
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are a thoughtful photography curator with keen visual perception who creates inspiring quotes based on what you actually see in photographs.'
+                    },
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'text',
+                                text: prompt
+                            },
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: imageUrl,
+                                    detail: 'high'
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens: 150,
+                temperature: 0.8
+            })
+        });
+
+        if (!response.ok) {
+            console.error('OpenAI API error:', response.status, response.statusText);
+            return generateFallbackQuote(photo);
+        }
+
+        const data = await response.json();
+        const quote = data.choices[0]?.message?.content?.trim();
+        
+        if (quote && quote.length > 10) {
+            // Clean up the quote (remove quotes if AI added them)
+            return quote.replace(/^["']|["']$/g, '');
+        } else {
+            return generateFallbackQuote(photo);
+        }
+        
+    } catch (error) {
+        console.error('Error generating AI quote:', error);
+        return generateFallbackQuote(photo);
+    }
+}
+
+function generateFallbackQuote(photo) {
+    // Fallback quotes when AI is not available
+    const fallbackQuotes = [
+        "Every photograph is a window into a moment that will never happen again",
+        "In photography, the smallest thing can be a great subject",
+        "Light makes photography. Embrace light, admire it, love it",
+        "Photography is the art of finding the extraordinary in the ordinary",
+        "A picture is worth a thousand words, but a great photograph tells an entire story",
+        "Through the lens, we capture not just images, but memories and emotions",
+        "Photography is about seeing beyond the surface and finding the soul within",
+        "Every frame holds the power to stop time and preserve a fleeting moment"
+    ];
+    
+    // Select a random fallback quote
+    return fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+}
+
+// AI Quotes Migration Function
+async function handleMigrateAIQuotes(request, env) {
+    try {
+        const migrations = [];
+        
+        // Create AI quotes table
+        try {
+            await env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS ai_quotes (
+                    id TEXT PRIMARY KEY,
+                    photo_id TEXT NOT NULL,
+                    quote TEXT NOT NULL,
+                    is_active INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
+                )
+            `).run();
+            migrations.push('Created ai_quotes table');
+        } catch (error) {
+            if (!error.message.includes('already exists')) {
+                throw error;
+            }
+            migrations.push('AI quotes table already exists');
+        }
+        
+        // Create indexes
+        try {
+            await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ai_quotes_photo_id ON ai_quotes(photo_id)').run();
+            await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ai_quotes_active ON ai_quotes(is_active)').run();
+            migrations.push('Created AI quotes indexes');
+        } catch (error) {
+            migrations.push('AI quotes indexes already exist');
+        }
+        
+        // Check if we need to generate an initial quote
+        const existingQuotes = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_quotes').first();
+        const photos = await env.DB.prepare('SELECT COUNT(*) as count FROM photos').first();
+        
+        if (existingQuotes.count === 0 && photos.count > 0) {
+            // Generate an initial quote automatically
+            try {
+                const randomPhoto = await env.DB.prepare(`
+                    SELECT id, url, title, description
+                    FROM photos
+                    ORDER BY RANDOM()
+                    LIMIT 1
+                `).first();
+                
+                if (randomPhoto) {
+                    const quote = await generateAIQuote(randomPhoto, env);
+                    const quoteId = crypto.randomUUID();
+                    
+                    await env.DB.prepare(`
+                        INSERT INTO ai_quotes (id, photo_id, quote, is_active, created_at)
+                        VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+                    `).bind(quoteId, randomPhoto.id, quote).run();
+                    
+                    migrations.push('Generated initial AI quote for hero section');
+                }
+            } catch (error) {
+                console.error('Failed to generate initial quote:', error);
+                migrations.push('Failed to generate initial quote (will use default)');
+            }
+        } else if (existingQuotes.count > 0) {
+            migrations.push('AI quotes already populated');
+        } else {
+            migrations.push('No photos available for quote generation');
+        }
+        
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'AI quotes database migration completed',
+            migrations: migrations
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('AI quotes migration error:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'AI quotes migration failed'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// AI Status Check Function
+async function handleGetAIStatus(request, env) {
+    try {
+        const hasOpenAI = !!env.OPENAI_API_KEY;
+        
+        // Test OpenAI API if key is available
+        let openAIWorking = false;
+        let error = null;
+        
+        if (hasOpenAI) {
+            try {
+                // Simple test request to OpenAI to verify it's working
+                const testResponse = await fetch('https://api.openai.com/v1/models', {
+                    headers: {
+                        'Authorization': `Bearer ${env.OPENAI_API_KEY}`
+                    }
+                });
+                
+                openAIWorking = testResponse.ok;
+                if (!testResponse.ok) {
+                    error = `OpenAI API error: ${testResponse.status} ${testResponse.statusText}`;
+                }
+            } catch (testError) {
+                openAIWorking = false;
+                error = `OpenAI API connection failed: ${testError.message}`;
+            }
+        }
+        
+        // Check database for existing quotes
+        const quotesCount = await env.DB.prepare('SELECT COUNT(*) as count FROM ai_quotes').first();
+        const photosCount = await env.DB.prepare('SELECT COUNT(*) as count FROM photos').first();
+        
+        return new Response(JSON.stringify({
+            openai: {
+                configured: hasOpenAI,
+                working: openAIWorking,
+                error: error
+            },
+            database: {
+                quotes: quotesCount?.count || 0,
+                photos: photosCount?.count || 0,
+                ready: quotesCount?.count > 0
+            },
+            status: hasOpenAI && openAIWorking ? 'ai_active' : 
+                   quotesCount?.count > 0 ? 'quotes_available' : 
+                   'fallback_only'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error getting AI status:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            status: 'error'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// Quote Management Functions
+async function handleGetAllQuotes(request, env) {
+    try {
+        const quotes = await env.DB.prepare(`
+            SELECT 
+                aq.id as quote_id,
+                aq.quote,
+                aq.created_at,
+                p.id as photo_id,
+                p.url as photo_url,
+                p.url as photo_thumbnail,
+                p.title as photo_title,
+                p.description as photo_description
+            FROM ai_quotes aq
+            JOIN photos p ON aq.photo_id = p.id
+            ORDER BY aq.created_at DESC
+        `).all();
+        
+        return new Response(JSON.stringify({
+            success: true,
+            quotes: quotes.results || [],
+            total: quotes.results?.length || 0
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error getting all quotes:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'Failed to get quotes'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function handleUpdateQuote(request, env) {
+    try {
+        const { quoteId, quote } = await request.json();
+        
+        if (!quoteId || !quote) {
+            return new Response(JSON.stringify({ 
+                error: 'Quote ID and quote text are required' 
+            }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Update the quote in database
+        const result = await env.DB.prepare(`
+            UPDATE ai_quotes 
+            SET quote = ?, created_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).bind(quote, quoteId).run();
+        
+        if (result.changes === 0) {
+            return new Response(JSON.stringify({ 
+                error: 'Quote not found' 
+            }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'Quote updated successfully'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error updating quote:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'Failed to update quote'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// Bulk Quote Generation Function
+async function handleUpdateAllQuotes(request, env) {
+    try {
+        // Get all photos from the gallery
+        const photos = await env.DB.prepare(`
+            SELECT id, url, title, description
+            FROM photos
+            ORDER BY upload_date DESC
+        `).all();
+
+        if (!photos.results || photos.results.length === 0) {
+            return new Response(JSON.stringify({ 
+                error: 'No photos available for quote generation',
+                processed: 0,
+                total: 0
+            }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        const allPhotos = photos.results;
+        const results = [];
+        const errors = [];
+        let successCount = 0;
+
+        // Clear all existing quotes to start fresh
+        await env.DB.prepare('DELETE FROM ai_quotes').run();
+
+        // Process each photo individually to generate contextual quotes
+        for (const photo of allPhotos) {
+            try {
+                console.log(`Generating quote for photo: ${photo.title || photo.id}`);
+                
+                // Generate AI quote specifically based on THIS photo's content and metadata
+                const quote = await generateAIQuote(photo, env);
+                
+                if (!quote) {
+                    errors.push(`Failed to generate quote for photo: ${photo.title || photo.id}`);
+                    continue;
+                }
+
+                // Save the photo-specific quote to database
+                const quoteId = crypto.randomUUID();
+                await env.DB.prepare(`
+                    INSERT INTO ai_quotes (id, photo_id, quote, is_active, created_at)
+                    VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP)
+                `).bind(quoteId, photo.id, quote).run();
+
+                successCount++;
+                results.push({
+                    photoId: photo.id,
+                    photoTitle: photo.title || 'Untitled',
+                    photoDescription: photo.description || 'No description',
+                    quote: quote,
+                    status: 'success',
+                    isAI: env.OPENAI_API_KEY ? true : false
+                });
+
+                // Add small delay to avoid rate limiting OpenAI API
+                if (env.OPENAI_API_KEY) {
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+                }
+
+            } catch (photoError) {
+                console.error(`Error processing photo ${photo.id}:`, photoError);
+                errors.push(`Error processing ${photo.title || photo.id}: ${photoError.message}`);
+            }
+        }
+
+        // Response with comprehensive results
+        const response = {
+            success: true,
+            total: allPhotos.length,
+            generated: successCount,
+            errors: errors.length,
+            message: `Successfully generated ${successCount} personalized quotes for ${allPhotos.length} photos`,
+            usingAI: env.OPENAI_API_KEY ? true : false,
+            sampleResults: results.slice(0, 5), // Show first 5 results as preview
+            errorDetails: errors.slice(0, 5) // Show first 5 errors if any
+        };
+
+        if (errors.length > 0) {
+            response.message += ` (${errors.length} errors occurred)`;
+        }
+
+        return new Response(JSON.stringify(response), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error in bulk quote update:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'Bulk quote update failed'
+        }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });
