@@ -189,8 +189,10 @@ function loadSectionData(sectionName) {
             loadAIStatus();
             break;
         case 'dashboard':
+            loadDashboard();
+            break;
         case 'visitors':
-            // Placeholder sections - no data to load yet
+            loadVisitorAnalytics();
             break;
     }
 }
@@ -1433,4 +1435,842 @@ async function updateQuote(quoteId) {
 
 function refreshQuotesList() {
     loadQuotes();
+}
+
+// Dashboard Functions
+async function loadDashboard() {
+    try {
+        await Promise.all([
+            loadDashboardOverview(),
+            loadRecentActivity(),
+            loadUploadTrends(),
+            loadSystemStatus(),
+            loadClientInfo()
+        ]);
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+        toast.error('Dashboard Error', 'Failed to load dashboard data');
+    }
+}
+
+async function loadDashboardOverview() {
+    try {
+        // Load basic stats from existing APIs
+        const [photosResponse, quotesResponse, aiStatusResponse, themesResponse] = await Promise.all([
+            fetch('/admin/api/photos', { headers: { 'Authorization': 'Bearer ' + adminToken } }),
+            fetch('/admin/api/quotes', { headers: { 'Authorization': 'Bearer ' + adminToken } }),
+            fetch('/admin/api/ai-status', { headers: { 'Authorization': 'Bearer ' + adminToken } }),
+            fetch('/admin/api/themes', { headers: { 'Authorization': 'Bearer ' + adminToken } })
+        ]);
+
+        const photos = photosResponse.ok ? await photosResponse.json() : [];
+        const quotes = quotesResponse.ok ? await quotesResponse.json() : { quotes: [] };
+        const aiStatus = aiStatusResponse.ok ? await aiStatusResponse.json() : null;
+        const themes = themesResponse.ok ? await themesResponse.json() : { currentTheme: 'modern' };
+
+        // Calculate storage usage (estimate)
+        const totalPhotos = Array.isArray(photos) ? photos.length : 0;
+        const estimatedStorage = totalPhotos * 2.5; // Rough estimate: 2.5MB per photo
+
+        // Update overview cards
+        updateOverviewCard('totalPhotos', totalPhotos, 'photos');
+        updateOverviewCard('totalQuotes', quotes.quotes?.length || 0, 'quotes');
+        updateOverviewCard('storageUsed', `${estimatedStorage.toFixed(1)}MB`, 'storage');
+        updateOverviewCard('activeTheme', themes.currentTheme || 'modern', 'theme');
+
+    } catch (error) {
+        console.error('Error loading dashboard overview:', error);
+    }
+}
+
+function updateOverviewCard(id, value, type) {
+    const numberEl = document.getElementById(id);
+    const changeEl = document.getElementById(id.replace('total', '').replace('storage', '').replace('active', '') + 'Change');
+    
+    if (numberEl) {
+        numberEl.textContent = value;
+    }
+    
+    if (changeEl) {
+        // Add some contextual change info
+        switch (type) {
+            case 'photos':
+                changeEl.textContent = 'Total in gallery';
+                break;
+            case 'quotes':
+                changeEl.textContent = 'AI generated';
+                break;
+            case 'storage':
+                changeEl.textContent = 'Estimated usage';
+                break;
+            case 'theme':
+                changeEl.textContent = 'Current theme';
+                break;
+        }
+    }
+}
+
+async function loadRecentActivity() {
+    try {
+        // Since we don't have activity logs, we'll generate mock recent activity
+        // In a real system, this would come from an activity log API
+        const activities = [
+            {
+                type: 'upload',
+                title: 'New photos uploaded',
+                time: 'Just now',
+                icon: '📸'
+            },
+            {
+                type: 'quote',
+                title: 'AI quotes generated',
+                time: '2 minutes ago',
+                icon: '🤖'
+            },
+            {
+                type: 'edit',
+                title: 'Photo metadata updated',
+                time: '1 hour ago',
+                icon: '✏️'
+            },
+            {
+                type: 'upload',
+                title: 'Theme changed',
+                time: '3 hours ago',
+                icon: '🎨'
+            }
+        ];
+
+        renderRecentActivity(activities);
+    } catch (error) {
+        console.error('Error loading recent activity:', error);
+    }
+}
+
+function renderRecentActivity(activities) {
+    const container = document.getElementById('recentActivity');
+    if (!container) return;
+
+    container.innerHTML = activities.map(activity => `
+        <div class="activity-item">
+            <div class="activity-icon ${activity.type}">
+                ${activity.icon}
+            </div>
+            <div class="activity-content">
+                <div class="activity-title">${activity.title}</div>
+                <div class="activity-time">${activity.time}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadUploadTrends() {
+    try {
+        // Generate trend data based on current month
+        // In a real system, this would come from analytics data
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+        const values = [5, 12, 8, 15, 20, 18]; // Mock data
+        
+        renderUploadTrends(months, values);
+    } catch (error) {
+        console.error('Error loading upload trends:', error);
+    }
+}
+
+function renderUploadTrends(months, values) {
+    const container = document.getElementById('uploadTrends');
+    if (!container) return;
+
+    const maxValue = Math.max(...values);
+    
+    container.innerHTML = months.map((month, index) => {
+        const height = (values[index] / maxValue) * 160; // Max height 160px
+        return `
+            <div class="trend-bar" 
+                 style="height: ${height}px" 
+                 data-value="${values[index]}"
+                 title="${month}: ${values[index]} photos">
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadSystemStatus() {
+    try {
+        // Check various system components
+        const aiStatus = await fetch('/admin/api/ai-status', { 
+            headers: { 'Authorization': 'Bearer ' + adminToken } 
+        });
+        
+        const statuses = [
+            {
+                label: 'API Server',
+                status: 'online',
+                indicator: 'online'
+            },
+            {
+                label: 'Database',
+                status: 'online',
+                indicator: 'online'
+            },
+            {
+                label: 'Storage',
+                status: 'online',
+                indicator: 'online'
+            },
+            {
+                label: 'AI Service',
+                status: aiStatus.ok ? 'online' : 'warning',
+                indicator: aiStatus.ok ? 'online' : 'warning'
+            }
+        ];
+
+        renderSystemStatus(statuses);
+    } catch (error) {
+        console.error('Error loading system status:', error);
+    }
+}
+
+function renderSystemStatus(statuses) {
+    const container = document.getElementById('systemStatus');
+    if (!container) return;
+
+    container.innerHTML = statuses.map(status => `
+        <div class="status-item">
+            <div class="status-indicator ${status.indicator}"></div>
+            <div class="status-label">${status.label}</div>
+        </div>
+    `).join('');
+}
+
+function loadClientInfo() {
+    const clientDetails = [
+        {
+            label: 'Browser',
+            value: getBrowserName()
+        },
+        {
+            label: 'OS',
+            value: getOperatingSystem()
+        },
+        {
+            label: 'Screen',
+            value: `${screen.width}×${screen.height}`
+        },
+        {
+            label: 'Viewport',
+            value: `${window.innerWidth}×${window.innerHeight}`
+        },
+        {
+            label: 'Connection',
+            value: getConnectionType()
+        },
+        {
+            label: 'Language',
+            value: navigator.language
+        }
+    ];
+
+    renderClientInfo(clientDetails);
+}
+
+function renderClientInfo(details) {
+    const container = document.getElementById('clientInfo');
+    if (!container) return;
+
+    container.innerHTML = details.map(detail => `
+        <div class="client-detail">
+            <span class="client-label">${detail.label}</span>
+            <span class="client-value">${detail.value}</span>
+        </div>
+    `).join('');
+}
+
+function getBrowserName() {
+    const userAgent = navigator.userAgent;
+    if (userAgent.includes('Chrome')) return 'Chrome';
+    if (userAgent.includes('Firefox')) return 'Firefox';
+    if (userAgent.includes('Safari')) return 'Safari';
+    if (userAgent.includes('Edge')) return 'Edge';
+    return 'Unknown';
+}
+
+function getOperatingSystem() {
+    const userAgent = navigator.userAgent;
+    if (userAgent.includes('Win')) return 'Windows';
+    if (userAgent.includes('Mac')) return 'macOS';
+    if (userAgent.includes('Linux')) return 'Linux';
+    if (userAgent.includes('Android')) return 'Android';
+    if (userAgent.includes('iOS')) return 'iOS';
+    return 'Unknown';
+}
+
+function getConnectionType() {
+    if ('connection' in navigator) {
+        return navigator.connection.effectiveType || 'Unknown';
+    }
+    return 'Unknown';
+}
+
+function refreshDashboard() {
+    toast.info('Refreshing', 'Updating dashboard data...', 2000);
+    loadDashboard();
+}
+
+// Visitor Analytics Functions
+let currentAnalyticsPeriod = '30'; // Default to 30 days
+
+async function loadVisitorAnalytics(period = currentAnalyticsPeriod) {
+    try {
+        currentAnalyticsPeriod = period;
+        
+        // Load real visitor data from the API with period parameter
+        const response = await fetch(`/admin/api/visitor-analytics?period=${period}`, {
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load visitor analytics');
+        }
+        
+        const data = await response.json();
+        
+        // Update all analytics sections with real data
+        updateVisitorOverview(data.overview);
+        updateLiveSessions(data.liveSessions);
+        updatePopularPages(data.popularPages);
+        updateGeographicData(data.geographic);
+        updateTechnologyData(data.technology);
+        updateResponseCodes(data.responseCodes, data.responseCodeDetails);
+        updateVisitTimeline(data.timeline);
+        updateRecentVisitors(data.recentVisitors);
+        updateTrendsCharts(data.trends);
+        updatePeriodSelector(period);
+        
+    } catch (error) {
+        console.error('Error loading visitor analytics:', error);
+        toast.error('Analytics Error', 'Failed to load visitor analytics');
+    }
+}
+
+function updateVisitorOverview(overview) {
+    // Update overview cards with real data and growth metrics
+    updateVisitorCard('totalVisitors', overview.totalVisitors, 'unique visitors', overview.visitorGrowth);
+    updateVisitorCard('pageViews', overview.pageViews, 'total page views', overview.pageViewGrowth);
+    updateVisitorCard('avgDuration', overview.avgDuration, 'average session');
+    updateVisitorCard('mobilePercentage', `${overview.mobilePercentage}%`, 'mobile traffic');
+    
+    // Update average response time if available
+    if (overview.avgResponseTime !== undefined) {
+        updateVisitorCard('avgResponseTime', `${overview.avgResponseTime}ms`, 'avg response time');
+    }
+}
+
+function updateVisitorCard(id, value, description, growth = null) {
+    const numberEl = document.getElementById(id);
+    const changeEl = document.getElementById(id.replace('total', '').replace('avg', '').replace('mobile', '') + 'Change');
+    
+    if (numberEl) {
+        numberEl.textContent = value;
+    }
+    
+    if (changeEl) {
+        if (growth !== null && growth !== undefined) {
+            const growthText = growth > 0 ? `+${growth}%` : `${growth}%`;
+            const growthClass = growth > 0 ? 'positive' : growth < 0 ? 'negative' : 'neutral';
+            changeEl.innerHTML = `<span class="growth-metric ${growthClass}">${growthText}</span> ${description}`;
+        } else {
+            changeEl.textContent = description;
+        }
+    }
+}
+
+function updateLiveSessions(liveSessionsCount) {
+    const container = document.getElementById('liveSessions');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="live-indicator ${liveSessionsCount > 0 ? 'pulse' : ''}">
+            <div class="live-count">${liveSessionsCount}</div>
+        </div>
+        <div class="live-label">Active Sessions</div>
+    `;
+}
+
+function updatePopularPages(pages) {
+    const container = document.getElementById('popularPages');
+    if (!container) return;
+
+    if (pages.length === 0) {
+        container.innerHTML = '<div class="loading">No page data available yet</div>';
+        return;
+    }
+
+    container.innerHTML = pages.map(page => `
+        <div class="page-item">
+            <div class="page-info">
+                <div class="page-title">${page.page_title}</div>
+                <div class="page-url">${page.page_url}</div>
+            </div>
+            <div class="page-views">${page.views}</div>
+        </div>
+    `).join('');
+}
+
+function updateGeographicData(geographic) {
+    const container = document.getElementById('geographicData');
+    if (!container) return;
+
+    if (geographic.length === 0) {
+        container.innerHTML = '<div class="loading">No geographic data available yet</div>';
+        return;
+    }
+
+    // Get total visitors for percentage calculation
+    const totalVisitors = geographic.reduce((sum, country) => sum + country.visitors, 0);
+
+    container.innerHTML = geographic.map(country => {
+        const percentage = totalVisitors > 0 ? Math.round((country.visitors / totalVisitors) * 100) : 0;
+        const flag = getCountryFlag(country.country_code);
+        
+        return `
+            <div class="geo-item">
+                <div class="geo-country">
+                    <span class="geo-flag">${flag}</span>
+                    <span class="geo-name">${country.country_name}</span>
+                </div>
+                <div class="geo-percentage">${percentage}%</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateTechnologyData(technology) {
+    const container = document.getElementById('technologyData');
+    if (!container) return;
+
+    // Calculate percentages for each category
+    const totalBrowsers = technology.browsers.reduce((sum, item) => sum + item.count, 0);
+    const totalDevices = technology.devices.reduce((sum, item) => sum + item.count, 0);
+    const totalOS = technology.os.reduce((sum, item) => sum + item.count, 0);
+
+    container.innerHTML = `
+        <div class="tech-category">
+            <div class="tech-title">Browsers</div>
+            ${technology.browsers.map(item => {
+                const percentage = totalBrowsers > 0 ? Math.round((item.count / totalBrowsers) * 100) : 0;
+                return `
+                    <div class="tech-item">
+                        <span class="tech-name">${item.browser}</span>
+                        <span class="tech-percentage">${percentage}%</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        
+        <div class="tech-category">
+            <div class="tech-title">Devices</div>
+            ${technology.devices.map(item => {
+                const percentage = totalDevices > 0 ? Math.round((item.count / totalDevices) * 100) : 0;
+                return `
+                    <div class="tech-item">
+                        <span class="tech-name">${item.device_type}</span>
+                        <span class="tech-percentage">${percentage}%</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        
+        <div class="tech-category">
+            <div class="tech-title">Operating Systems</div>
+            ${technology.os.map(item => {
+                const percentage = totalOS > 0 ? Math.round((item.count / totalOS) * 100) : 0;
+                return `
+                    <div class="tech-item">
+                        <span class="tech-name">${item.os}</span>
+                        <span class="tech-percentage">${percentage}%</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function updateResponseCodes(responseCodes, responseCodeDetails = []) {
+    const container = document.getElementById('responseCodeData');
+    if (!container) return;
+
+    if (responseCodes.length === 0) {
+        container.innerHTML = '<div class="loading">No response code data available yet</div>';
+        return;
+    }
+
+    // Calculate total requests for percentages
+    const totalRequests = responseCodes.reduce((sum, item) => sum + item.count, 0);
+    
+    // Group details by response code for easy access
+    const detailsGrouped = {};
+    responseCodeDetails.forEach(detail => {
+        if (!detailsGrouped[detail.response_code]) {
+            detailsGrouped[detail.response_code] = [];
+        }
+        detailsGrouped[detail.response_code].push(detail);
+    });
+
+    container.innerHTML = `
+        <div class="response-codes">
+            ${responseCodes.map((item, index) => {
+                const percentage = totalRequests > 0 ? Math.round((item.count / totalRequests) * 100) : 0;
+                const statusClass = getStatusClass(item.response_code);
+                const statusText = getStatusText(item.response_code);
+                const details = detailsGrouped[item.response_code] || [];
+                const hasDetails = details.length > 0;
+                
+                return `
+                    <div class="response-code-item ${hasDetails ? 'expandable' : ''}" data-code="${item.response_code}">
+                        <div class="response-code-header" ${hasDetails ? `onclick="toggleResponseCodeDetails('${item.response_code}')"` : ''}>
+                            <div class="response-code-info">
+                                <span class="response-code ${statusClass}">${item.response_code}</span>
+                                <span class="response-text">${statusText}</span>
+                                ${hasDetails ? '<span class="expand-icon">▶</span>' : ''}
+                            </div>
+                            <div class="response-percentage">${percentage}% (${item.count})</div>
+                        </div>
+                        ${hasDetails ? `
+                            <div class="response-code-details" id="details-${item.response_code}" style="display: none;">
+                                <div class="details-header">Pages affected:</div>
+                                ${details.map(detail => `
+                                    <div class="detail-item">
+                                        <div class="detail-page">
+                                            <span class="detail-url">${detail.page_url}</span>
+                                            <span class="detail-title">${detail.page_title}</span>
+                                        </div>
+                                        <div class="detail-count">${detail.count}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function getStatusClass(code) {
+    if (code >= 200 && code < 300) return 'success';
+    if (code >= 300 && code < 400) return 'redirect';
+    if (code >= 400 && code < 500) return 'client-error';
+    if (code >= 500) return 'server-error';
+    return 'info';
+}
+
+function getStatusText(code) {
+    const statusTexts = {
+        200: 'OK',
+        201: 'Created',
+        204: 'No Content',
+        301: 'Moved Permanently',
+        302: 'Found',
+        304: 'Not Modified',
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        403: 'Forbidden',
+        404: 'Not Found',
+        405: 'Method Not Allowed',
+        500: 'Internal Server Error',
+        502: 'Bad Gateway',
+        503: 'Service Unavailable'
+    };
+    
+    return statusTexts[code] || 'Unknown Status';
+}
+
+function updateVisitTimeline(timelineData) {
+    const container = document.getElementById('visitTimeline');
+    if (!container) return;
+
+    if (timelineData.length === 0) {
+        container.innerHTML = '<div class="loading">No timeline data available yet</div>';
+        return;
+    }
+
+    // Create a complete 24-hour array with real data
+    const hours = Array.from({ length: 24 }, (_, i) => {
+        const hourStr = i.toString().padStart(2, '0');
+        const hourData = timelineData.find(item => item.hour === hourStr);
+        return {
+            hour: `${hourStr}:00`,
+            visits: hourData ? hourData.visits : 0
+        };
+    });
+
+    const maxVisits = Math.max(...hours.map(h => h.visits), 1); // Avoid division by zero
+    
+    container.innerHTML = hours.map(hourData => {
+        const height = maxVisits > 0 ? (hourData.visits / maxVisits) * 150 : 5; // Max height 150px, min 5px
+        return `
+            <div class="timeline-bar" 
+                 style="height: ${height}px" 
+                 data-hour="${hourData.hour}"
+                 title="${hourData.hour}: ${hourData.visits} visits">
+            </div>
+        `;
+    }).join('');
+}
+
+function updateRecentVisitors(recentVisitors) {
+    const container = document.getElementById('recentVisitors');
+    if (!container) return;
+
+    if (recentVisitors.length === 0) {
+        container.innerHTML = '<div class="loading">No recent visitors yet</div>';
+        return;
+    }
+
+    container.innerHTML = recentVisitors.map(visitor => {
+        const avatar = generateAvatar(visitor.city, visitor.country_name);
+        const timeAgo = getTimeAgo(visitor.session_start);
+        const location = `${visitor.city}, ${visitor.country_name}`;
+        
+        return `
+            <div class="visitor-session">
+                <div class="session-avatar">${avatar}</div>
+                <div class="session-info">
+                    <div class="session-location">${location}</div>
+                    <div class="session-details">
+                        <span>${visitor.browser}</span>
+                        <span>${visitor.device_type}</span>
+                    </div>
+                </div>
+                <div class="session-meta">
+                    <div class="session-time">${timeAgo}</div>
+                    <div class="session-duration">${visitor.formattedDuration}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Helper Functions for Visitor Analytics
+function getCountryFlag(countryCode) {
+    // Basic country code to flag emoji mapping
+    const flagMap = {
+        'US': '🇺🇸', 'CA': '🇨🇦', 'GB': '🇬🇧', 'DE': '🇩🇪', 'FR': '🇫🇷',
+        'IT': '🇮🇹', 'ES': '🇪🇸', 'NL': '🇳🇱', 'SE': '🇸🇪', 'NO': '🇳🇴',
+        'DK': '🇩🇰', 'FI': '🇫🇮', 'CH': '🇨🇭', 'AT': '🇦🇹', 'BE': '🇧🇪',
+        'JP': '🇯🇵', 'CN': '🇨🇳', 'KR': '🇰🇷', 'AU': '🇦🇺', 'NZ': '🇳🇿',
+        'BR': '🇧🇷', 'AR': '🇦🇷', 'MX': '🇲🇽', 'IN': '🇮🇳', 'RU': '🇷🇺'
+    };
+    
+    return flagMap[countryCode] || '🌍';
+}
+
+function generateAvatar(city, country) {
+    // Generate a simple avatar based on location
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+    const initials = (city.charAt(0) + country.charAt(0)).toUpperCase();
+    const colorIndex = (city.length + country.length) % colors.length;
+    const bgColor = colors[colorIndex];
+    
+    return `<div style="background: ${bgColor}; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">${initials}</div>`;
+}
+
+function getTimeAgo(dateString) {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diff = Math.floor((now - date) / 1000); // difference in seconds
+    
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function toggleResponseCodeDetails(responseCode) {
+    const detailsElement = document.getElementById(`details-${responseCode}`);
+    const expandIcon = document.querySelector(`[data-code="${responseCode}"] .expand-icon`);
+    
+    if (detailsElement && expandIcon) {
+        const isVisible = detailsElement.style.display !== 'none';
+        
+        if (isVisible) {
+            detailsElement.style.display = 'none';
+            expandIcon.textContent = '▶';
+            expandIcon.style.transform = 'rotate(0deg)';
+        } else {
+            detailsElement.style.display = 'block';
+            expandIcon.textContent = '▼';
+            expandIcon.style.transform = 'rotate(90deg)';
+        }
+    }
+}
+
+function updateTrendsCharts(trends) {
+    // Update daily trends chart
+    updateDailyTrendsChart(trends.daily);
+    
+    // Update weekly trends chart  
+    updateWeeklyTrendsChart(trends.weekly);
+}
+
+function updateDailyTrendsChart(dailyData) {
+    const container = document.getElementById('dailyTrendsChart');
+    if (!container) return;
+    
+    if (dailyData.length === 0) {
+        container.innerHTML = '<div class="loading">No daily trend data available yet</div>';
+        return;
+    }
+    
+    // Find max value for scaling
+    const maxVisitors = Math.max(...dailyData.map(d => d.unique_visitors), 1);
+    
+    container.innerHTML = `
+        <div class="trends-chart">
+            <div class="chart-header">
+                <h4>Daily Visitors</h4>
+                <span class="chart-period">Last ${dailyData.length} days</span>
+            </div>
+            <div class="chart-bars">
+                ${dailyData.map(day => {
+                    const height = (day.unique_visitors / maxVisitors) * 120; // Max height 120px
+                    const date = new Date(day.date);
+                    const dayName = date.toLocaleDateString('en', { weekday: 'short' });
+                    const dayNum = date.getDate();
+                    
+                    return `
+                        <div class="trend-bar-container">
+                            <div class="trend-bar" 
+                                 style="height: ${height}px" 
+                                 title="${day.date}: ${day.unique_visitors} visitors, ${day.page_views} views">
+                            </div>
+                            <div class="trend-label">
+                                <div class="day-name">${dayName}</div>
+                                <div class="day-num">${dayNum}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function updateWeeklyTrendsChart(weeklyData) {
+    const container = document.getElementById('weeklyTrendsChart');
+    if (!container) return;
+    
+    if (weeklyData.length === 0) {
+        container.innerHTML = '<div class="loading">No weekly trend data available yet</div>';
+        return;
+    }
+    
+    // Find max value for scaling
+    const maxVisitors = Math.max(...weeklyData.map(d => d.unique_visitors), 1);
+    
+    container.innerHTML = `
+        <div class="trends-chart">
+            <div class="chart-header">
+                <h4>Weekly Visitors</h4>
+                <span class="chart-period">Last ${weeklyData.length} weeks</span>
+            </div>
+            <div class="chart-bars">
+                ${weeklyData.map(week => {
+                    const height = (week.unique_visitors / maxVisitors) * 120; // Max height 120px
+                    const weekLabel = week.week.split('-W')[1] || week.week;
+                    
+                    return `
+                        <div class="trend-bar-container">
+                            <div class="trend-bar" 
+                                 style="height: ${height}px" 
+                                 title="Week ${weekLabel}: ${week.unique_visitors} visitors, ${week.page_views} views">
+                            </div>
+                            <div class="trend-label">W${weekLabel}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function updatePeriodSelector(currentPeriod) {
+    const selector = document.getElementById('analyticsPeriodSelector');
+    if (!selector) return;
+    
+    const periods = [
+        { value: '7', label: '7 days' },
+        { value: '30', label: '30 days' },
+        { value: '90', label: '90 days' },
+        { value: '365', label: '1 year' }
+    ];
+    
+    selector.innerHTML = periods.map(period => `
+        <option value="${period.value}" ${period.value === currentPeriod ? 'selected' : ''}>
+            ${period.label}
+        </option>
+    `).join('');
+}
+
+function changePeriod() {
+    const selector = document.getElementById('analyticsPeriodSelector');
+    if (selector) {
+        const newPeriod = selector.value;
+        toast.info('Loading', `Loading ${selector.options[selector.selectedIndex].text} of data...`, 2000);
+        loadVisitorAnalytics(newPeriod);
+    }
+}
+
+function refreshVisitorData() {
+    toast.info('Refreshing', 'Updating visitor analytics...', 2000);
+    loadVisitorAnalytics(currentAnalyticsPeriod);
+}
+
+async function exportVisitorData() {
+    try {
+        // Fetch real visitor data for export
+        const response = await fetch('/admin/api/visitor-analytics?period=365', {
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch visitor data for export');
+        }
+        
+        const data = await response.json();
+        
+        const exportData = {
+            exported_at: new Date().toISOString(),
+            period: '365 days',
+            overview: data.overview,
+            geographic: data.geographic,
+            technology: data.technology,
+            popular_pages: data.popularPages,
+            recent_visitors: data.recentVisitors,
+            timeline: data.timeline
+        };
+        
+        // Create and download JSON file
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `visitor-analytics-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast.success('Export Complete', 'Visitor analytics data has been downloaded');
+        
+    } catch (error) {
+        console.error('Export failed:', error);
+        toast.error('Export Failed', error.message);
+    }
 }

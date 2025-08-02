@@ -10,27 +10,54 @@ import { LocationService } from './location.js';
 
 export default {
     async fetch(request, env, ctx) {
+        const startTime = Date.now();
+        let response;
+        let responseCode = 200;
+        
         try {
             const url = new URL(request.url);
             const pathname = url.pathname;
 
             // Admin routes
             if (pathname.startsWith('/admin')) {
-                return handleAdminRequest(request, env, pathname);
+                response = await handleAdminRequest(request, env, pathname);
+                responseCode = response.status;
+                return response;
             }
             
             // API Routes only - static files handled by Cloudflare Assets
             if (pathname.startsWith('/api/')) {
-                return handleApiRequest(request, env, pathname);
+                response = await handleApiRequest(request, env, pathname);
+                responseCode = response.status;
+                
+                // Track visitor data for non-admin API calls
+                const responseTime = Date.now() - startTime;
+                await trackVisitor(request, env, responseCode, responseTime);
+                
+                return response;
             }
 
             // Let Cloudflare Assets handle static files
             // This includes /, /static/css/style.css, /static/js/gallery.js, etc.
-            return env.ASSETS.fetch(request);
+            response = await env.ASSETS.fetch(request);
+            responseCode = response.status;
+            
+            // Track visitor data for public pages (exclude admin)
+            const responseTime = Date.now() - startTime;
+            await trackVisitor(request, env, responseCode, responseTime);
+
+            return response;
 
         } catch (error) {
             console.error('Worker error:', error);
-            return new Response('Internal Server Error', { status: 500 });
+            responseCode = 500;
+            response = new Response('Internal Server Error', { status: 500 });
+            
+            // Track error responses too
+            const responseTime = Date.now() - startTime;
+            await trackVisitor(request, env, responseCode, responseTime);
+            
+            return response;
         }
     }
 };
@@ -41,11 +68,11 @@ async function handleAdminRequest(request, env, pathname) {
     // Simple authentication check for API routes
     if (pathname.startsWith('/admin/api/')) {
         const authHeader = request.headers.get('Authorization');
-        const adminPassword = env.ADMIN_PASSWORD || 'admin123';
+        const adminPassword = env.ADMIN_PASSWORD;
         
         console.log('Auth check - Header:', authHeader ? 'Present' : 'Missing', 'Expected:', `Bearer ${adminPassword}`);
         
-        if (!authHeader || authHeader !== `Bearer ${adminPassword}`) {
+        if (!adminPassword || !authHeader || authHeader !== `Bearer ${adminPassword}`) {
             console.log('Authentication failed');
             return new Response('Unauthorized', { status: 401 });
         }
@@ -179,6 +206,18 @@ async function handleAdminRequest(request, env, pathname) {
                 return handleUpdateQuote(request, env);
             }
             break;
+            
+        case '/admin/api/visitor-analytics':
+            if (request.method === 'GET') {
+                return handleGetVisitorAnalytics(request, env);
+            }
+            break;
+            
+        case '/admin/api/generate-test-visitors':
+            if (request.method === 'POST') {
+                return handleGenerateTestVisitors(request, env);
+            }
+            break;
     }
     
     // Serve static admin files
@@ -193,9 +232,9 @@ async function handleApiRequest(request, env, pathname) {
     
     if (protectedEndpoints.includes(pathname)) {
         const authHeader = request.headers.get('Authorization');
-        const adminPassword = env.ADMIN_PASSWORD || 'admin123';
+        const adminPassword = env.ADMIN_PASSWORD;
         
-        if (!authHeader || authHeader !== `Bearer ${adminPassword}`) {
+        if (!adminPassword || !authHeader || authHeader !== `Bearer ${adminPassword}`) {
             return new Response('Unauthorized', { status: 401 });
         }
     }
@@ -929,9 +968,9 @@ async function handleAdminMigrate(request, env) {
 async function handleAdminAuth(request, env) {
     try {
         const { password } = await request.json();
-        const adminPassword = env.ADMIN_PASSWORD || 'admin123';
+        const adminPassword = env.ADMIN_PASSWORD;
         
-        if (password === adminPassword) {
+        if (adminPassword && password === adminPassword) {
             return new Response(JSON.stringify({ 
                 success: true,
                 message: 'Authentication successful'
@@ -2066,6 +2105,545 @@ async function handleUpdateAllQuotes(request, env) {
             error: error.message,
             message: 'Bulk quote update failed'
         }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// Visitor Analytics Functions
+
+function isAdminRequest(request, env) {
+    // Check if request has admin authorization header
+    const authHeader = request.headers.get('Authorization');
+    const adminPassword = env.ADMIN_PASSWORD;
+    
+    if (adminPassword && authHeader && authHeader === `Bearer ${adminPassword}`) {
+        return true;
+    }
+    
+    // Check for admin session cookie or other admin indicators
+    const cookies = request.headers.get('Cookie') || '';
+    if (adminPassword && cookies.includes('adminToken=' + adminPassword)) {
+        return true;
+    }
+    
+    return false;
+}
+
+async function trackVisitor(request, env, responseCode = 200, responseTime = 0) {
+    try {
+        const url = new URL(request.url);
+        
+        // Skip tracking for admin pages, admin API calls, and asset files
+        if (url.pathname.startsWith('/admin') || 
+            url.pathname.startsWith('/static') ||
+            url.pathname.includes('.css') ||
+            url.pathname.includes('.js') ||
+            url.pathname.includes('.ico') ||
+            url.pathname.includes('.png') ||
+            url.pathname.includes('.jpg') ||
+            url.pathname.includes('.jpeg') ||
+            url.pathname.includes('.gif') ||
+            url.pathname.includes('.svg') ||
+            url.pathname.includes('.woff') ||
+            url.pathname.includes('.ttf')) {
+            return;
+        }
+        
+        // Skip tracking if request is from admin user
+        if (isAdminRequest(request, env)) {
+            return;
+        }
+
+        // Get visitor info from Cloudflare's request object
+        const cf = request.cf || {};
+        const userAgent = request.headers.get('User-Agent') || '';
+        const referer = request.headers.get('Referer') || '';
+        
+        // Hash IP for privacy (GDPR compliant)
+        const clientIP = request.headers.get('CF-Connecting-IP') || 
+                        request.headers.get('X-Forwarded-For') || 
+                        'unknown';
+        const ipHash = await hashIP(clientIP);
+        
+        // Parse user agent for device info
+        const deviceInfo = parseUserAgent(userAgent);
+        
+        // Check if this is an existing session (within last 30 minutes)
+        const existingSession = await env.DB.prepare(`
+            SELECT id, page_views FROM visitor_sessions 
+            WHERE ip_hash = ? AND session_start > datetime('now', '-30 minutes')
+            ORDER BY session_start DESC LIMIT 1
+        `).bind(ipHash).first();
+        
+        let sessionId;
+        
+        if (existingSession) {
+            // Update existing session with latest browser info if available
+            sessionId = existingSession.id;
+            
+            await env.DB.prepare(`
+                UPDATE visitor_sessions 
+                SET page_views = page_views + 1, 
+                    session_end = CURRENT_TIMESTAMP,
+                    browser = ?,
+                    device_type = ?,
+                    os = ?,
+                    user_agent = ?
+                WHERE id = ?
+            `).bind(deviceInfo.browser, deviceInfo.deviceType, deviceInfo.os, userAgent, sessionId).run();
+            
+        } else {
+            // Create new session
+            sessionId = crypto.randomUUID();
+            
+            await env.DB.prepare(`
+                INSERT INTO visitor_sessions (
+                    id, ip_hash, session_start, session_end, user_agent, 
+                    country_code, country_name, city, region, browser, 
+                    device_type, os, referrer, page_views
+                ) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `).bind(
+                sessionId, ipHash, userAgent,
+                cf.country || 'Unknown',
+                cf.country || 'Unknown', 
+                cf.city || 'Unknown',
+                cf.region || 'Unknown',
+                deviceInfo.browser,
+                deviceInfo.deviceType,
+                deviceInfo.os,
+                referer
+            ).run();
+        }
+        
+        // Record page view with response code and timing
+        const pageViewId = crypto.randomUUID();
+        await env.DB.prepare(`
+            INSERT INTO page_views (id, session_id, page_url, page_title, viewed_at, response_code, response_time_ms)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+        `).bind(pageViewId, sessionId, url.pathname, getPageTitle(url.pathname), responseCode, responseTime).run();
+        
+    } catch (error) {
+        // Don't fail the request if analytics tracking fails
+        console.error('Visitor tracking error:', error);
+    }
+}
+
+async function hashIP(ip) {
+    // Hash IP address for privacy compliance
+    const encoder = new TextEncoder();
+    const data = encoder.encode(ip + 'salt_for_privacy');
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function parseUserAgent(userAgent) {
+    const ua = userAgent.toLowerCase();
+    
+    // Browser detection - improved patterns
+    let browser = 'Unknown';
+    if (ua.includes('firefox/') && !ua.includes('seamonkey')) {
+        browser = 'Firefox';
+    } else if (ua.includes('edg/')) {
+        browser = 'Edge';
+    } else if (ua.includes('chrome/') && !ua.includes('edg/') && !ua.includes('opr/')) {
+        browser = 'Chrome';
+    } else if (ua.includes('safari/') && !ua.includes('chrome/')) {
+        browser = 'Safari';
+    } else if (ua.includes('opr/') || ua.includes('opera/')) {
+        browser = 'Opera';
+    } else if (ua.includes('curl/')) {
+        browser = 'cURL';
+    } else if (ua.includes('wget/')) {
+        browser = 'Wget';
+    }
+    
+    // Device type detection - improved patterns
+    let deviceType = 'Desktop';
+    if (ua.includes('mobile') || ua.includes('android') && ua.includes('mobile')) {
+        deviceType = 'Mobile';
+    } else if (ua.includes('tablet') || ua.includes('ipad') || (ua.includes('android') && !ua.includes('mobile'))) {
+        deviceType = 'Tablet';
+    }
+    
+    // OS detection - improved patterns  
+    let os = 'Unknown';
+    if (ua.includes('windows nt')) {
+        const version = ua.match(/windows nt ([\d.]+)/);
+        if (version) {
+            const ntVersion = version[1];
+            if (ntVersion === '10.0') os = 'Windows 10/11';
+            else if (ntVersion === '6.3') os = 'Windows 8.1';
+            else if (ntVersion === '6.2') os = 'Windows 8';
+            else if (ntVersion === '6.1') os = 'Windows 7';
+            else os = 'Windows';
+        } else {
+            os = 'Windows';
+        }
+    } else if (ua.includes('mac os x') || ua.includes('macos')) {
+        os = 'macOS';
+    } else if (ua.includes('iphone os') || ua.includes('cpu os')) {
+        os = 'iOS';
+    } else if (ua.includes('android')) {
+        const version = ua.match(/android ([\d.]+)/);
+        os = version ? `Android ${version[1].split('.')[0]}` : 'Android';
+    } else if (ua.includes('linux')) {
+        if (ua.includes('ubuntu')) os = 'Ubuntu';
+        else if (ua.includes('debian')) os = 'Debian';
+        else if (ua.includes('fedora')) os = 'Fedora';
+        else if (ua.includes('centos')) os = 'CentOS';
+        else os = 'Linux';
+    } else if (ua.includes('curl')) {
+        os = 'CLI Tool';
+    }
+    
+    return { browser, deviceType, os };
+}
+
+function getPageTitle(pathname) {
+    switch (pathname) {
+        case '/': return 'Gallery';
+        case '/about': return 'About';
+        case '/contact': return 'Contact';
+        default: return 'Page';
+    }
+}
+
+async function handleGetVisitorAnalytics(request, env) {
+    try {
+        const url = new URL(request.url);
+        const period = url.searchParams.get('period') || '30'; // days
+        
+        // Get visitor overview stats for current period
+        const overviewQuery = `
+            SELECT 
+                COUNT(DISTINCT id) as unique_visitors,
+                SUM(page_views) as total_page_views,
+                AVG(CAST((julianday(session_end) - julianday(session_start)) * 24 * 60 * 60 AS INTEGER)) as avg_duration_seconds,
+                COUNT(CASE WHEN device_type = 'Mobile' THEN 1 END) * 100.0 / COUNT(*) as mobile_percentage
+            FROM visitor_sessions 
+            WHERE session_start > datetime('now', '-${period} days')
+        `;
+        
+        const overview = await env.DB.prepare(overviewQuery).first();
+        
+        // Get comparison data from previous period for growth metrics
+        const previousPeriodQuery = `
+            SELECT 
+                COUNT(DISTINCT id) as previous_visitors,
+                SUM(page_views) as previous_page_views
+            FROM visitor_sessions 
+            WHERE session_start > datetime('now', '-${period * 2} days') 
+            AND session_start <= datetime('now', '-${period} days')
+        `;
+        
+        const previousPeriod = await env.DB.prepare(previousPeriodQuery).first();
+        
+        // Get popular pages
+        const popularPages = await env.DB.prepare(`
+            SELECT page_url, page_title, COUNT(*) as views
+            FROM page_views pv
+            JOIN visitor_sessions vs ON pv.session_id = vs.id
+            WHERE vs.session_start > datetime('now', '-${period} days')
+            GROUP BY page_url, page_title
+            ORDER BY views DESC
+            LIMIT 10
+        `).all();
+        
+        // Get geographic distribution
+        const geoData = await env.DB.prepare(`
+            SELECT country_code, country_name, COUNT(*) as visitors
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-${period} days')
+            GROUP BY country_code, country_name
+            ORDER BY visitors DESC
+            LIMIT 10
+        `).all();
+        
+        // Get technology breakdown
+        const browserData = await env.DB.prepare(`
+            SELECT browser, COUNT(*) as count
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-${period} days')
+            GROUP BY browser
+            ORDER BY count DESC
+        `).all();
+        
+        const deviceData = await env.DB.prepare(`
+            SELECT device_type, COUNT(*) as count
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-${period} days')
+            GROUP BY device_type
+            ORDER BY count DESC
+        `).all();
+        
+        const osData = await env.DB.prepare(`
+            SELECT os, COUNT(*) as count
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-${period} days')
+            GROUP BY os
+            ORDER BY count DESC
+        `).all();
+        
+        // Get hourly visit timeline for last 24 hours
+        const timelineData = await env.DB.prepare(`
+            SELECT 
+                strftime('%H', session_start) as hour,
+                COUNT(*) as visits
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-1 day')
+            GROUP BY strftime('%H', session_start)
+            ORDER BY hour
+        `).all();
+        
+        // Get recent visitors (last 10)
+        const recentVisitors = await env.DB.prepare(`
+            SELECT 
+                city, country_name, browser, device_type, 
+                session_start, 
+                CAST((julianday(session_end) - julianday(session_start)) * 24 * 60 * 60 AS INTEGER) as duration_seconds
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-1 day')
+            ORDER BY session_start DESC
+            LIMIT 10
+        `).all();
+        
+        // Get current live sessions (active in last 5 minutes)
+        const liveSessions = await env.DB.prepare(`
+            SELECT COUNT(*) as count
+            FROM visitor_sessions
+            WHERE session_end > datetime('now', '-5 minutes')
+        `).first();
+        
+        // Get response code statistics
+        const responseCodeData = await env.DB.prepare(`
+            SELECT response_code, COUNT(*) as count
+            FROM page_views pv
+            JOIN visitor_sessions vs ON pv.session_id = vs.id
+            WHERE vs.session_start > datetime('now', '-${period} days')
+            GROUP BY response_code
+            ORDER BY count DESC
+        `).all();
+        
+        // Get detailed response code breakdown by page
+        const responseCodeDetails = await env.DB.prepare(`
+            SELECT 
+                response_code, 
+                page_url, 
+                page_title,
+                COUNT(*) as count
+            FROM page_views pv
+            JOIN visitor_sessions vs ON pv.session_id = vs.id
+            WHERE vs.session_start > datetime('now', '-${period} days')
+            GROUP BY response_code, page_url, page_title
+            ORDER BY response_code, count DESC
+        `).all();
+        
+        // Get average response time
+        const avgResponseTime = await env.DB.prepare(`
+            SELECT AVG(response_time_ms) as avg_time
+            FROM page_views pv
+            JOIN visitor_sessions vs ON pv.session_id = vs.id
+            WHERE vs.session_start > datetime('now', '-${period} days')
+        `).first();
+        
+        // Get daily visitor trends for the period
+        const dailyTrendsQuery = `
+            SELECT 
+                DATE(session_start) as date,
+                COUNT(DISTINCT id) as unique_visitors,
+                SUM(page_views) as page_views,
+                COUNT(*) as sessions
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-${period} days')
+            GROUP BY DATE(session_start)
+            ORDER BY date ASC
+        `;
+        
+        const dailyTrends = await env.DB.prepare(dailyTrendsQuery).all();
+        
+        // Get weekly trends (last 12 weeks)
+        const weeklyTrendsQuery = `
+            SELECT 
+                strftime('%Y-W%W', session_start) as week,
+                COUNT(DISTINCT id) as unique_visitors,
+                SUM(page_views) as page_views,
+                COUNT(*) as sessions
+            FROM visitor_sessions
+            WHERE session_start > datetime('now', '-84 days')
+            GROUP BY strftime('%Y-W%W', session_start)
+            ORDER BY week ASC
+        `;
+        
+        const weeklyTrends = await env.DB.prepare(weeklyTrendsQuery).all();
+        
+        // Calculate growth metrics
+        const currentVisitors = overview?.unique_visitors || 0;
+        const previousVisitors = previousPeriod?.previous_visitors || 0;
+        const currentPageViews = overview?.total_page_views || 0;
+        const previousPageViews = previousPeriod?.previous_page_views || 0;
+        
+        const visitorGrowth = previousVisitors > 0 ? 
+            Math.round(((currentVisitors - previousVisitors) / previousVisitors) * 100) : 0;
+        const pageViewGrowth = previousPageViews > 0 ? 
+            Math.round(((currentPageViews - previousPageViews) / previousPageViews) * 100) : 0;
+        
+        return new Response(JSON.stringify({
+            overview: {
+                totalVisitors: currentVisitors,
+                pageViews: currentPageViews,
+                avgDuration: formatDuration(overview?.avg_duration_seconds || 0),
+                mobilePercentage: Math.round(overview?.mobile_percentage || 0),
+                visitorGrowth: visitorGrowth,
+                pageViewGrowth: pageViewGrowth,
+                previousPeriodVisitors: previousVisitors,
+                previousPeriodPageViews: previousPageViews,
+                avgResponseTime: Math.round(avgResponseTime?.avg_time || 0)
+            },
+            liveSessions: liveSessions?.count || 0,
+            popularPages: popularPages.results || [],
+            geographic: geoData.results || [],
+            technology: {
+                browsers: browserData.results || [],
+                devices: deviceData.results || [],
+                os: osData.results || []
+            },
+            responseCodes: responseCodeData.results || [],
+            responseCodeDetails: responseCodeDetails.results || [],
+            timeline: timelineData.results || [],
+            recentVisitors: (recentVisitors.results || []).map(visitor => ({
+                ...visitor,
+                formattedDuration: formatDuration(visitor.duration_seconds)
+            })),
+            trends: {
+                daily: dailyTrends.results || [],
+                weekly: weeklyTrends.results || [],
+                period: parseInt(period)
+            }
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error getting visitor analytics:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+function formatDuration(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+}
+
+// Test Data Generation Function (for development only)
+async function handleGenerateTestVisitors(request, env) {
+    try {
+        const { count = 10 } = await request.json();
+        
+        // Sample user agents for different browsers and devices
+        const userAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36',
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36'
+        ];
+        
+        const countries = [
+            { code: 'US', name: 'United States', cities: ['New York', 'Los Angeles', 'Chicago', 'Houston'] },
+            { code: 'GB', name: 'United Kingdom', cities: ['London', 'Manchester', 'Birmingham', 'Liverpool'] },
+            { code: 'DE', name: 'Germany', cities: ['Berlin', 'Munich', 'Hamburg', 'Frankfurt'] },
+            { code: 'FR', name: 'France', cities: ['Paris', 'Lyon', 'Marseille', 'Toulouse'] },
+            { code: 'CA', name: 'Canada', cities: ['Toronto', 'Vancouver', 'Montreal', 'Calgary'] },
+            { code: 'AU', name: 'Australia', cities: ['Sydney', 'Melbourne', 'Brisbane', 'Perth'] },
+            { code: 'JP', name: 'Japan', cities: ['Tokyo', 'Osaka', 'Kyoto', 'Yokohama'] },
+            { code: 'SE', name: 'Sweden', cities: ['Stockholm', 'Gothenburg', 'Malmö', 'Uppsala'] }
+        ];
+        
+        const pages = ['/', '/about', '/contact'];
+        
+        const createdSessions = [];
+        
+        for (let i = 0; i < count; i++) {
+            // Generate random session data
+            const userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+            const deviceInfo = parseUserAgent(userAgent);
+            const country = countries[Math.floor(Math.random() * countries.length)];
+            const city = country.cities[Math.floor(Math.random() * country.cities.length)];
+            
+            // Generate random IP hash (simulate different IPs)
+            const randomIP = `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+            const ipHash = await hashIP(randomIP);
+            
+            // Random session timing (last 7 days)
+            const now = new Date();
+            const sessionStart = new Date(now.getTime() - Math.random() * 7 * 24 * 60 * 60 * 1000);
+            const sessionDuration = Math.floor(Math.random() * 600) + 30; // 30 seconds to 10 minutes
+            const sessionEnd = new Date(sessionStart.getTime() + sessionDuration * 1000);
+            const pageViewCount = Math.floor(Math.random() * 5) + 1; // 1-5 page views
+            
+            // Create session
+            const sessionId = crypto.randomUUID();
+            
+            await env.DB.prepare(`
+                INSERT INTO visitor_sessions (
+                    id, ip_hash, session_start, session_end, user_agent,
+                    country_code, country_name, city, region, browser,
+                    device_type, os, referrer, page_views
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+                sessionId, ipHash, sessionStart.toISOString(), sessionEnd.toISOString(), userAgent,
+                country.code, country.name, city, country.name,
+                deviceInfo.browser, deviceInfo.deviceType, deviceInfo.os,
+                '', pageViewCount
+            ).run();
+            
+            // Create page views for this session
+            for (let j = 0; j < pageViewCount; j++) {
+                const page = pages[Math.floor(Math.random() * pages.length)];
+                const pageTitle = getPageTitle(page);
+                const viewTime = new Date(sessionStart.getTime() + (j * sessionDuration * 1000 / pageViewCount));
+                
+                const pageViewId = crypto.randomUUID();
+                await env.DB.prepare(`
+                    INSERT INTO page_views (id, session_id, page_url, page_title, viewed_at)
+                    VALUES (?, ?, ?, ?, ?)
+                `).bind(pageViewId, sessionId, page, pageTitle, viewTime.toISOString()).run();
+            }
+            
+            createdSessions.push({
+                sessionId,
+                browser: deviceInfo.browser,
+                device: deviceInfo.deviceType,
+                os: deviceInfo.os,
+                country: country.name,
+                city,
+                pageViews: pageViewCount
+            });
+        }
+        
+        return new Response(JSON.stringify({
+            success: true,
+            message: `Generated ${count} test visitor sessions`,
+            sessions: createdSessions
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error generating test visitors:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });

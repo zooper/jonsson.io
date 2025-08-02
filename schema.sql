@@ -62,9 +62,47 @@ CREATE TABLE IF NOT EXISTS ai_quotes (
   FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
 );
 
+-- Visitor analytics tables
+CREATE TABLE IF NOT EXISTS visitor_sessions (
+  id TEXT PRIMARY KEY,
+  ip_hash TEXT NOT NULL,
+  session_start DATETIME DEFAULT CURRENT_TIMESTAMP,
+  session_end DATETIME,
+  user_agent TEXT,
+  country_code TEXT,
+  country_name TEXT,
+  city TEXT,
+  region TEXT,
+  browser TEXT,
+  device_type TEXT,
+  os TEXT,
+  referrer TEXT,
+  page_views INTEGER DEFAULT 0,
+  duration_seconds INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS page_views (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  page_url TEXT NOT NULL,
+  page_title TEXT,
+  viewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  time_on_page INTEGER DEFAULT 0,
+  response_code INTEGER DEFAULT 200,
+  response_time_ms INTEGER DEFAULT 0,
+  FOREIGN KEY (session_id) REFERENCES visitor_sessions(id) ON DELETE CASCADE
+);
+
 -- Index for faster queries
 CREATE INDEX IF NOT EXISTS idx_photos_upload_date ON photos(upload_date);
 CREATE INDEX IF NOT EXISTS idx_photos_camera_make ON photos(camera_make);
 CREATE INDEX IF NOT EXISTS idx_photos_b2_file_id ON photos(b2_file_id);
 CREATE INDEX IF NOT EXISTS idx_ai_quotes_photo_id ON ai_quotes(photo_id);
 CREATE INDEX IF NOT EXISTS idx_ai_quotes_active ON ai_quotes(is_active);
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_start ON visitor_sessions(session_start);
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_country ON visitor_sessions(country_code);
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_device ON visitor_sessions(device_type);
+CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id);
+CREATE INDEX IF NOT EXISTS idx_page_views_url ON page_views(page_url);
+CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at ON page_views(viewed_at);
+CREATE INDEX IF NOT EXISTS idx_page_views_response_code ON page_views(response_code);

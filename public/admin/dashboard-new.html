@@ -68,7 +68,6 @@
                             <path d="M9 9h6v6H9z"></path>
                         </svg>
                         <span class="nav-text">Dashboard</span>
-                        <span class="nav-badge coming-soon">Soon</span>
                     </a>
                     <a href="#visitors" class="nav-item" data-section="visitors">
                         <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -78,7 +77,6 @@
                             <path d="M16 3.13a4 4 0 010 7.75"></path>
                         </svg>
                         <span class="nav-text">Visitors</span>
-                        <span class="nav-badge coming-soon">Soon</span>
                     </a>
                 </div>
                 
@@ -234,21 +232,112 @@
                     <div class="section-header">
                         <div class="section-title">
                             <h2>Analytics Dashboard</h2>
-                            <p>Monitor your website performance and visitor engagement</p>
+                            <p>Monitor your website performance and portfolio metrics</p>
+                        </div>
+                        <div class="section-actions">
+                            <button class="btn btn-outline" onclick="refreshDashboard()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="23,4 23,10 17,10"></polyline>
+                                    <polyline points="1,20 1,14 7,14"></polyline>
+                                    <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0313.51 15"></path>
+                                </svg>
+                                Refresh
+                            </button>
                         </div>
                     </div>
                     
-                    <div class="coming-soon-container">
-                        <div class="coming-soon-icon">📊</div>
-                        <h3>Analytics Dashboard</h3>
-                        <p>Get insights into your website traffic, popular photos, and visitor behavior.</p>
-                        <div class="feature-list">
-                            <div class="feature-item">📈 Visitor Statistics</div>
-                            <div class="feature-item">🖼️ Popular Photos</div>
-                            <div class="feature-item">🌍 Geographic Data</div>
-                            <div class="feature-item">📱 Device Analytics</div>
+                    <!-- Overview Cards -->
+                    <div class="dashboard-overview">
+                        <div class="overview-card">
+                            <div class="overview-icon">📸</div>
+                            <div class="overview-content">
+                                <div class="overview-number" id="totalPhotos">-</div>
+                                <div class="overview-label">Total Photos</div>
+                                <div class="overview-change" id="photosChange">-</div>
+                            </div>
                         </div>
-                        <div class="coming-soon-badge">Coming Soon</div>
+                        
+                        <div class="overview-card">
+                            <div class="overview-icon">💬</div>
+                            <div class="overview-content">
+                                <div class="overview-number" id="totalQuotes">-</div>
+                                <div class="overview-label">AI Quotes</div>
+                                <div class="overview-change" id="quotesChange">-</div>
+                            </div>
+                        </div>
+                        
+                        <div class="overview-card">
+                            <div class="overview-icon">💾</div>
+                            <div class="overview-content">
+                                <div class="overview-number" id="storageUsed">-</div>
+                                <div class="overview-label">Storage Used</div>
+                                <div class="overview-change" id="storageChange">-</div>
+                            </div>
+                        </div>
+                        
+                        <div class="overview-card">
+                            <div class="overview-icon">🎨</div>
+                            <div class="overview-content">
+                                <div class="overview-number" id="activeTheme">-</div>
+                                <div class="overview-label">Active Theme</div>
+                                <div class="overview-change" id="themeChange">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Charts and Analytics -->
+                    <div class="dashboard-grid">
+                        <!-- Recent Activity -->
+                        <div class="dashboard-card">
+                            <div class="card-header">
+                                <h3>Recent Activity</h3>
+                                <span class="card-subtitle">Last 7 days</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="activity-list" id="recentActivity">
+                                    <div class="loading">Loading activity...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Photo Upload Trends -->
+                        <div class="dashboard-card">
+                            <div class="card-header">
+                                <h3>Upload Trends</h3>
+                                <span class="card-subtitle">Photos per month</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="trend-chart" id="uploadTrends">
+                                    <div class="loading">Loading trends...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- System Status -->
+                        <div class="dashboard-card">
+                            <div class="card-header">
+                                <h3>System Status</h3>
+                                <span class="card-subtitle">Current status</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="status-grid" id="systemStatus">
+                                    <div class="loading">Loading status...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Browser & Device Info -->
+                        <div class="dashboard-card">
+                            <div class="card-header">
+                                <h3>Client Information</h3>
+                                <span class="card-subtitle">Your session details</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="client-info" id="clientInfo">
+                                    <div class="loading">Loading info...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
                 
@@ -256,22 +345,195 @@
                 <section id="visitors-section" class="section">
                     <div class="section-header">
                         <div class="section-title">
-                            <h2>Visitor Management</h2>
-                            <p>Manage user accounts and visitor permissions</p>
+                            <h2>Visitor Analytics</h2>
+                            <p>Monitor visitor engagement and website performance</p>
+                        </div>
+                        <div class="section-actions">
+                            <div class="period-selector">
+                                <label for="analyticsPeriodSelector">Time Period:</label>
+                                <select id="analyticsPeriodSelector" onchange="changePeriod()" class="period-select">
+                                    <option value="7">7 days</option>
+                                    <option value="30" selected>30 days</option>
+                                    <option value="90">90 days</option>
+                                    <option value="365">1 year</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-outline" onclick="refreshVisitorData()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="23,4 23,10 17,10"></polyline>
+                                    <polyline points="1,20 1,14 7,14"></polyline>
+                                    <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0313.51 15"></path>
+                                </svg>
+                                Refresh Data
+                            </button>
+                            <button class="btn btn-primary" onclick="exportVisitorData()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+                                    <polyline points="7,10 12,15 17,10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Export Data
+                            </button>
                         </div>
                     </div>
                     
-                    <div class="coming-soon-container">
-                        <div class="coming-soon-icon">👥</div>
-                        <h3>User Management</h3>
-                        <p>Control access to your photography portfolio and manage user accounts.</p>
-                        <div class="feature-list">
-                            <div class="feature-item">👤 User Accounts</div>
-                            <div class="feature-item">🔐 Access Control</div>
-                            <div class="feature-item">📧 Email Management</div>
-                            <div class="feature-item">🎯 User Groups</div>
+                    <!-- Visitor Overview -->
+                    <div class="visitor-overview">
+                        <div class="visitor-card">
+                            <div class="visitor-icon">👥</div>
+                            <div class="visitor-content">
+                                <div class="visitor-number" id="totalVisitors">-</div>
+                                <div class="visitor-label">Total Visitors</div>
+                                <div class="visitor-change" id="visitorsChange">-</div>
+                            </div>
                         </div>
-                        <div class="coming-soon-badge">Coming Soon</div>
+                        
+                        <div class="visitor-card">
+                            <div class="visitor-icon">📊</div>
+                            <div class="visitor-content">
+                                <div class="visitor-number" id="pageViews">-</div>
+                                <div class="visitor-label">Page Views</div>
+                                <div class="visitor-change" id="pageViewsChange">-</div>
+                            </div>
+                        </div>
+                        
+                        <div class="visitor-card">
+                            <div class="visitor-icon">⏱️</div>
+                            <div class="visitor-content">
+                                <div class="visitor-number" id="avgDuration">-</div>
+                                <div class="visitor-label">Avg. Duration</div>
+                                <div class="visitor-change" id="durationChange">-</div>
+                            </div>
+                        </div>
+                        
+                        <div class="visitor-card">
+                            <div class="visitor-icon">📱</div>
+                            <div class="visitor-content">
+                                <div class="visitor-number" id="mobilePercentage">-</div>
+                                <div class="visitor-label">Mobile Users</div>
+                                <div class="visitor-change" id="mobileChange">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Visitor Analytics Grid -->
+                    <div class="visitor-grid">
+                        <!-- Real-time Sessions -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Live Sessions</h3>
+                                <span class="card-subtitle">Current visitors</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="live-sessions" id="liveSessions">
+                                    <div class="loading">Checking for live sessions...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Popular Pages -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Popular Pages</h3>
+                                <span class="card-subtitle">Most visited content</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="popular-pages" id="popularPages">
+                                    <div class="loading">Loading page statistics...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Geographic Data -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Geographic Distribution</h3>
+                                <span class="card-subtitle">Visitor locations</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="geographic-data" id="geographicData">
+                                    <div class="loading">Loading location data...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Device & Browser Analytics -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Technology Stack</h3>
+                                <span class="card-subtitle">Devices and browsers</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="technology-data" id="technologyData">
+                                    <div class="loading">Loading technology data...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Response Codes -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Response Codes</h3>
+                                <span class="card-subtitle">HTTP status distribution</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="response-code-data" id="responseCodeData">
+                                    <div class="loading">Loading response code data...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Visit Timeline -->
+                        <div class="visitor-analytics-card full-width">
+                            <div class="card-header">
+                                <h3>Visit Timeline</h3>
+                                <span class="card-subtitle">24-hour activity</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="timeline-chart" id="visitTimeline">
+                                    <div class="loading">Loading timeline data...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Daily Trends Chart -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Daily Trends</h3>
+                                <span class="card-subtitle">Visitor patterns over time</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="daily-trends-chart" id="dailyTrendsChart">
+                                    <div class="loading">Loading daily trends...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Weekly Trends Chart -->
+                        <div class="visitor-analytics-card">
+                            <div class="card-header">
+                                <h3>Weekly Trends</h3>
+                                <span class="card-subtitle">Long-term growth patterns</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="weekly-trends-chart" id="weeklyTrendsChart">
+                                    <div class="loading">Loading weekly trends...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Visitors -->
+                        <div class="visitor-analytics-card full-width">
+                            <div class="card-header">
+                                <h3>Recent Visitor Sessions</h3>
+                                <span class="card-subtitle">Latest activity</span>
+                            </div>
+                            <div class="card-content">
+                                <div class="recent-visitors" id="recentVisitors">
+                                    <div class="loading">Loading recent visitors...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
                 
