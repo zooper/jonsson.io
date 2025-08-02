@@ -3,10 +3,10 @@ main = "src/index.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domain configuration
+# Custom domain configuration  
 routes = [
-  "jonsson.io",
-  "www.jonsson.io"
+  "jonsson.io/*",
+  "www.jonsson.io/*"
 ]
 
 # Static assets configuration
