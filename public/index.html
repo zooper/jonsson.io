@@ -7,7 +7,7 @@
     <meta name="description" content="Photography portfolio by Jonsson - capturing life through the lens">
     <meta name="theme-color" content="#0a0a0f">
     <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="/static/css/themes/modern.css" id="theme-stylesheet">
+    <link rel="stylesheet" href="/static/css/themes/leica.css" id="theme-stylesheet">
     <style>
         /* Prevent FOUC during theme loading */
         body { opacity: 0; transition: opacity 0.3s ease; }
@@ -226,41 +226,73 @@
         // Load the current theme
         async function loadCurrentTheme() {
             try {
-                const response = await fetch('/api/theme');
+                // Add timeout for mobile networks
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+                
+                const response = await fetch('/api/theme', {
+                    signal: controller.signal,
+                    cache: 'force-cache' // Use cache to speed up repeat visits
+                });
+                clearTimeout(timeoutId);
+                
                 if (response.ok) {
                     const data = await response.json();
                     const themeStylesheet = document.getElementById('theme-stylesheet');
+                    
+                    // Check if theme needs to change
+                    const currentHref = themeStylesheet.href;
+                    const newThemeUrl = new URL(data.cssUrl, window.location.origin).href;
+                    
+                    if (currentHref === newThemeUrl) {
+                        // Theme is already correct, just show page
+                        document.body.classList.add('theme-loaded');
+                        return;
+                    }
+                    
                     if (themeStylesheet && data.cssUrl) {
                         // Create a new link element to avoid loading issues
                         const newThemeLink = document.createElement('link');
                         newThemeLink.rel = 'stylesheet';
                         newThemeLink.href = data.cssUrl;
-                        newThemeLink.id = 'theme-stylesheet';
+                        newThemeLink.id = 'theme-stylesheet-new';
+                        
+                        // Set timeout for CSS loading
+                        const cssTimeout = setTimeout(() => {
+                            console.warn('Theme CSS loading timed out, showing default');
+                            document.body.classList.add('theme-loaded');
+                        }, 2000);
                         
                         // Wait for the new theme to load before replacing
                         newThemeLink.onload = () => {
+                            clearTimeout(cssTimeout);
                             themeStylesheet.remove();
-                            document.head.appendChild(newThemeLink);
+                            newThemeLink.id = 'theme-stylesheet';
                             document.body.classList.add('theme-loaded');
                         };
                         
                         newThemeLink.onerror = () => {
+                            clearTimeout(cssTimeout);
                             console.error('Failed to load theme CSS:', data.cssUrl);
-                            document.body.classList.add('theme-loaded'); // Show page anyway
+                            newThemeLink.remove();
+                            document.body.classList.add('theme-loaded'); // Show page with default
                         };
                         
                         // Start loading the new theme
                         document.head.appendChild(newThemeLink);
                     } else {
-                        // No theme change needed, just show the page
                         document.body.classList.add('theme-loaded');
                     }
                 } else {
-                    // API call failed, use default theme
+                    console.warn('Theme API failed:', response.status);
                     document.body.classList.add('theme-loaded');
                 }
             } catch (error) {
-                console.error('Failed to load theme:', error);
+                if (error.name === 'AbortError') {
+                    console.warn('Theme API request timed out');
+                } else {
+                    console.error('Failed to load theme:', error);
+                }
                 document.body.classList.add('theme-loaded'); // Show page with default theme
             }
         }
