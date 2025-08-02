@@ -8,6 +8,11 @@
     <meta name="theme-color" content="#0a0a0f">
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/css/themes/modern.css" id="theme-stylesheet">
+    <style>
+        /* Prevent FOUC during theme loading */
+        body { opacity: 0; transition: opacity 0.3s ease; }
+        body.theme-loaded { opacity: 1; }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Crimson+Text:wght@400;600&family=Courier+Prime:wght@400;700&family=Dancing+Script:wght@400;600&display=swap" rel="stylesheet">
@@ -226,12 +231,37 @@
                     const data = await response.json();
                     const themeStylesheet = document.getElementById('theme-stylesheet');
                     if (themeStylesheet && data.cssUrl) {
-                        themeStylesheet.href = data.cssUrl;
+                        // Create a new link element to avoid loading issues
+                        const newThemeLink = document.createElement('link');
+                        newThemeLink.rel = 'stylesheet';
+                        newThemeLink.href = data.cssUrl;
+                        newThemeLink.id = 'theme-stylesheet';
+                        
+                        // Wait for the new theme to load before replacing
+                        newThemeLink.onload = () => {
+                            themeStylesheet.remove();
+                            document.head.appendChild(newThemeLink);
+                            document.body.classList.add('theme-loaded');
+                        };
+                        
+                        newThemeLink.onerror = () => {
+                            console.error('Failed to load theme CSS:', data.cssUrl);
+                            document.body.classList.add('theme-loaded'); // Show page anyway
+                        };
+                        
+                        // Start loading the new theme
+                        document.head.appendChild(newThemeLink);
+                    } else {
+                        // No theme change needed, just show the page
+                        document.body.classList.add('theme-loaded');
                     }
+                } else {
+                    // API call failed, use default theme
+                    document.body.classList.add('theme-loaded');
                 }
             } catch (error) {
                 console.error('Failed to load theme:', error);
-                // Fallback to modern theme if loading fails
+                document.body.classList.add('theme-loaded'); // Show page with default theme
             }
         }
         
@@ -294,8 +324,10 @@
         }
         
         // Load everything when DOM is ready
-        function initializePage() {
-            loadCurrentTheme();
+        async function initializePage() {
+            // Load theme first to avoid visual flash
+            await loadCurrentTheme();
+            // Then load site settings
             loadSiteSettings();
         }
         
