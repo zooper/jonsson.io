@@ -516,3 +516,133 @@ async function bulkRescanExif() {
 
 // Load photos on page load
 loadPhotos();
+
+// Theme Management
+let themes = [];
+let selectedTheme = null;
+
+async function loadThemes() {
+    try {
+        const response = await fetch('/admin/api/themes', {
+            headers: {
+                'Authorization': 'Bearer ' + adminToken
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            themes = data.themes;
+            selectedTheme = data.currentTheme;
+            renderThemes();
+        } else {
+            toast.error('Error', 'Failed to load themes');
+        }
+    } catch (error) {
+        console.error('Error loading themes:', error);
+        toast.error('Error', 'Failed to load themes');
+    }
+}
+
+function renderThemes() {
+    const themeGrid = document.getElementById('themeGrid');
+    
+    themeGrid.innerHTML = themes.map(theme => `
+        <div class="theme-card ${theme.id === selectedTheme ? 'selected' : ''}" 
+             data-theme="${theme.id}" 
+             onclick="selectTheme('${theme.id}')">
+            <div class="theme-preview">
+                <div class="preview-elements">
+                    <div class="preview-circle"></div>
+                    <div class="preview-rect"></div>
+                    <div class="preview-line"></div>
+                </div>
+            </div>
+            <div class="theme-info">
+                <h3 class="theme-name">${theme.name}</h3>
+                <p class="theme-description">${theme.description}</p>
+                <div class="theme-colors">
+                    <div class="theme-color" style="background: ${theme.colors.primary}"></div>
+                    <div class="theme-color" style="background: ${theme.colors.accent}"></div>
+                    <div class="theme-color" style="background: ${theme.colors.background}"></div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    updateApplyButton();
+}
+
+function selectTheme(themeId) {
+    // Remove previous selection
+    document.querySelectorAll('.theme-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    // Add selection to clicked theme
+    const selectedCard = document.querySelector(`[data-theme="${themeId}"]`);
+    if (selectedCard) {
+        selectedCard.classList.add('selected');
+        selectedTheme = themeId;
+        updateApplyButton();
+    }
+}
+
+function updateApplyButton() {
+    const applyBtn = document.getElementById('applyThemeBtn');
+    const currentTheme = themes.find(t => t.id === selectedTheme);
+    
+    if (currentTheme) {
+        applyBtn.style.display = 'inline-block';
+        applyBtn.onclick = () => applyTheme(selectedTheme);
+        
+        // Check if it's the currently active theme
+        const isCurrentTheme = themes.find(t => t.id === selectedTheme && t.id === themes.find(t => t.id === selectedTheme)?.id);
+        applyBtn.textContent = isCurrentTheme ? 'Theme Applied' : 'Apply Selected Theme';
+        applyBtn.disabled = false;
+    } else {
+        applyBtn.style.display = 'none';
+    }
+}
+
+async function applyTheme(themeId) {
+    const applyBtn = document.getElementById('applyThemeBtn');
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Applying...';
+    
+    try {
+        const response = await fetch('/admin/api/themes', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + adminToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ themeId })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            toast.success('Theme Applied', `${themes.find(t => t.id === themeId)?.name} theme is now active on your website!`);
+            
+            // Update button text
+            applyBtn.textContent = 'Theme Applied';
+            applyBtn.disabled = false;
+            
+            // Optionally reload themes to get updated current theme
+            setTimeout(() => loadThemes(), 1000);
+            
+        } else {
+            const error = await response.json();
+            toast.error('Apply Failed', error.message || 'Failed to apply theme');
+            applyBtn.disabled = false;
+            applyBtn.textContent = 'Apply Selected Theme';
+        }
+    } catch (error) {
+        console.error('Error applying theme:', error);
+        toast.error('Apply Failed', 'Failed to apply theme');
+        applyBtn.disabled = false;
+        applyBtn.textContent = 'Apply Selected Theme';
+    }
+}
+
+// Load themes on page load
+loadThemes();

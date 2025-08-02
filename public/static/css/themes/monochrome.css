@@ -1,0 +1,350 @@
+/**
+ * Monochrome Theme - Pure black and white photography aesthetic
+ * Inspired by classic film photography and darkroom aesthetics
+ */
+
+:root {
+    /* Monochrome Color Palette */
+    --primary-color: #000000;
+    --primary-dark: #1a1a1a;
+    --secondary-color: #333333;
+    --background: #ffffff;
+    --surface: #fafafa;
+    --text-primary: #000000;
+    --text-secondary: #555555;
+    --text-muted: #888888;
+    --border-color: #e0e0e0;
+    --shadow-light: rgba(0, 0, 0, 0.1);
+    --shadow-medium: rgba(0, 0, 0, 0.15);
+    
+    /* Typography - classic, readable */
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    
+    /* Spacing */
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 2rem;
+    --spacing-lg: 3rem;
+    --spacing-xl: 4rem;
+    
+    /* Sharp, geometric borders */
+    --border-radius: 0px;
+    --border-radius-lg: 2px;
+    
+    /* Gradients - subtle gray variations */
+    --accent-gradient: linear-gradient(135deg, #000000, #333333);
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-border: rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode variant */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background: #000000;
+        --surface: #111111;
+        --text-primary: #ffffff;
+        --text-secondary: #cccccc;
+        --text-muted: #888888;
+        --border-color: #333333;
+        --glass-bg: rgba(17, 17, 17, 0.95);
+        --glass-border: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Body and base styles */
+body {
+    background: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    transition: all 0.3s ease;
+}
+
+/* Hero section - stark, dramatic */
+.hero {
+    background: var(--background);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.hero-title {
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    position: relative;
+}
+
+.hero-title::after {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--primary-color);
+}
+
+.hero-subtitle {
+    color: var(--text-secondary);
+    font-weight: 300;
+    font-style: italic;
+}
+
+/* CTA Button - bold, geometric */
+.cta-button {
+    background: var(--primary-color);
+    color: var(--background);
+    border: 2px solid var(--primary-color);
+    padding: 1rem 2rem;
+    border-radius: var(--border-radius);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+
+.cta-button:hover {
+    background: var(--background);
+    color: var(--primary-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+/* Navigation - minimal, stark */
+.nav {
+    background: var(--background);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.nav-brand {
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.nav-link {
+    color: var(--text-secondary);
+    transition: color 0.3s ease;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: var(--primary-color);
+}
+
+/* Photo Gallery - clean, grid-like */
+.photo-card {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.photo-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-color);
+    transform: scale(1.02);
+}
+
+.photo-overlay {
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(0, 0, 0, 0.4) 70%,
+        rgba(0, 0, 0, 0.9) 100%
+    );
+}
+
+.photo-title {
+    color: white;
+    font-family: var(--font-display);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.photo-description {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.photo-meta {
+    color: rgba(255, 255, 255, 0.8);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+/* About section - editorial style */
+.about-content {
+    background: var(--surface);
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-lg);
+    position: relative;
+}
+
+.about-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--primary-color);
+}
+
+/* Glass cards - minimal transparency */
+.glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-lg);
+    backdrop-filter: blur(10px);
+}
+
+/* Lightbox - dramatic, high contrast */
+.lightbox {
+    background: rgba(0, 0, 0, 0.98);
+}
+
+.lightbox-content {
+    background: var(--surface);
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+}
+
+.lightbox-title {
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.lightbox-nav button {
+    background: var(--background);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    transition: all 0.3s ease;
+}
+
+.lightbox-nav button:hover {
+    background: var(--primary-color);
+    color: var(--background);
+    border-color: var(--primary-color);
+}
+
+/* EXIF display - technical, precise */
+.exif-data {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+}
+
+.exif-row {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.exif-row strong {
+    color: var(--text-primary);
+}
+
+/* Footer - stark, minimal */
+.footer {
+    background: var(--primary-color);
+    color: var(--background);
+    border-top: 2px solid var(--primary-color);
+}
+
+.footer a {
+    color: var(--background);
+    transition: opacity 0.3s ease;
+}
+
+.footer a:hover {
+    opacity: 0.8;
+}
+
+/* Film grain texture overlay */
+.film-grain {
+    position: relative;
+    overflow: hidden;
+}
+
+.film-grain::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+        radial-gradient(circle at 20% 50%, transparent 20%, rgba(255,255,255,0.3) 21%, rgba(255,255,255,0.3) 34%, transparent 35%, transparent),
+        linear-gradient(0deg, transparent 24%, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.05) 26%, transparent 27%, transparent 74%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05) 76%, transparent 77%, transparent);
+    background-size: 50px 50px;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* Typography emphasis */
+.monochrome-emphasis {
+    position: relative;
+    display: inline-block;
+}
+
+.monochrome-emphasis::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--primary-color);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.monochrome-emphasis:hover::after {
+    transform: scaleX(1);
+}
+
+/* Sharp, geometric animations */
+@keyframes sharpFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.photo-card {
+    animation: sharpFadeIn 0.4s ease forwards;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    :root {
+        --border-color: var(--primary-color);
+        --shadow-light: rgba(0, 0, 0, 0.2);
+        --shadow-medium: rgba(0, 0, 0, 0.3);
+    }
+}
