@@ -277,6 +277,12 @@ async function handleAdminRequest(request, env, pathname) {
                 return handleCloudflareAnalytics(request, env);
             }
             break;
+            
+        case '/admin/api/photos/map-visibility':
+            if (request.method === 'PUT') {
+                return handleUpdatePhotoMapVisibility(request, env);
+            }
+            break;
     }
     
     // Serve static admin files
@@ -309,6 +315,9 @@ async function handleApiRequest(request, env, pathname) {
         switch (pathname) {
             case '/api/photos':
                 return handlePhotosRequest(storage, request, env.DB);
+            
+            case '/api/photos/map':
+                return handlePhotosMapRequest(env.DB);
             
             case '/api/debug':
                 return handleDebugRequest(storage, request);
@@ -367,6 +376,32 @@ async function handlePhotosRequest(storage, request, db) {
     } catch (error) {
         console.error('Error fetching photos:', error);
         return new Response(JSON.stringify({ error: 'Failed to fetch photos' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function handlePhotosMapRequest(db) {
+    try {
+        const photoDb = new PhotoDatabase(db);
+        const photos = await photoDb.getPhotosForMap();
+        
+        return new Response(JSON.stringify({
+            photos: photos,
+            total: photos.length
+        }), {
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'public, max-age=600' // Cache for 10 minutes
+            }
+        });
+    } catch (error) {
+        console.error('Error loading photos for map:', error);
+        return new Response(JSON.stringify({ 
+            error: 'Failed to load photos for map',
+            photos: []
+        }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });
@@ -950,6 +985,47 @@ async function handleAdminUpdate(request, env) {
         });
         
     } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function handleUpdatePhotoMapVisibility(request, env) {
+    const photoDb = new PhotoDatabase(env.DB);
+    
+    try {
+        const { photoId, showOnMap } = await request.json();
+        
+        if (!photoId) {
+            return new Response(JSON.stringify({ error: 'Photo ID required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Check if photo exists
+        const photo = await photoDb.getPhotoByB2FileId(photoId);
+        if (!photo) {
+            return new Response(JSON.stringify({ error: 'Photo not found' }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Update map visibility
+        await photoDb.updatePhotoMapVisibility(photoId, showOnMap);
+        
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'Photo map visibility updated successfully'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error updating photo map visibility:', error);
         return new Response(JSON.stringify({ error: error.message }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }

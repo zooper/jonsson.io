@@ -31,8 +31,8 @@ export class PhotoDatabase {
                 shutter_speed, iso,
                 gps_latitude, gps_longitude, gps_altitude,
                 location_city, location_state, location_country, location_full_address,
-                date_taken
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                date_taken, show_on_map
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         await stmt.bind(
@@ -66,7 +66,9 @@ export class PhotoDatabase {
             location?.country || null,
             location?.fullAddress || null,
             // Date - ensure it's a valid timestamp format for SQLite
-            exifData?.timestamp ? new Date(exifData.timestamp).toISOString() : null
+            exifData?.timestamp ? new Date(exifData.timestamp).toISOString() : null,
+            // Map visibility - default to showing on map
+            photoData.showOnMap !== undefined ? (photoData.showOnMap ? 1 : 0) : 1
         ).run();
     }
 
@@ -138,6 +140,33 @@ export class PhotoDatabase {
         `);
         
         await stmt.bind(b2FileId).run();
+    }
+
+    /**
+     * Update photo map visibility
+     */
+    async updatePhotoMapVisibility(b2FileId, showOnMap) {
+        const stmt = this.db.prepare(`
+            UPDATE photos SET show_on_map = ? WHERE b2_file_id = ?
+        `);
+        
+        await stmt.bind(showOnMap ? 1 : 0, b2FileId).run();
+    }
+
+    /**
+     * Get photos with GPS data for map display
+     */
+    async getPhotosForMap() {
+        const stmt = this.db.prepare(`
+            SELECT * FROM photos 
+            WHERE gps_latitude IS NOT NULL 
+              AND gps_longitude IS NOT NULL 
+              AND show_on_map = 1
+            ORDER BY upload_date DESC
+        `);
+        
+        const result = await stmt.all();
+        return result.results ? result.results.map(row => this.formatPhotoFromRow(row)) : [];
     }
 
     /**
@@ -246,6 +275,7 @@ export class PhotoDatabase {
             url: row.url,
             thumbnail_url: row.url, // Use same URL for now
             uploadDate: row.upload_date,
+            showOnMap: row.show_on_map === 1,
             exif: this.formatExifFromRow(row)
         };
     }

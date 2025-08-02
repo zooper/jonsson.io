@@ -3613,6 +3613,8 @@ class NotificationManager {
 // Initialize notification manager
 const notificationManager = new NotificationManager();
 
+
+
 // Activity tracking system
 class ActivityTracker {
     constructor() {

@@ -1,5 +1,5 @@
 -- Database schema for jonsson.io photography website
--- Current version: 4
+-- Current version: 5
 
 -- Database version tracking
 CREATE TABLE IF NOT EXISTS database_version (
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS database_version (
 
 -- Insert current version if not exists
 INSERT OR IGNORE INTO database_version (id, version, description) 
-VALUES (1, 4, 'Add magic link authentication system');
+VALUES (1, 5, 'Add photo map visibility control');
 
 -- Photos table for storing photo metadata and EXIF data
 CREATE TABLE IF NOT EXISTS photos (
@@ -54,7 +54,10 @@ CREATE TABLE IF NOT EXISTS photos (
   
   -- File metadata
   file_size INTEGER,
-  content_type TEXT
+  content_type TEXT,
+  
+  -- Map visibility control
+  show_on_map INTEGER DEFAULT 1
 );
 
 -- Settings table for storing site configuration
