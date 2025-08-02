@@ -3428,6 +3428,199 @@ function getCountryCodeFromName(countryName) {
     return null;
 }
 
+// Notification System
+class NotificationManager {
+    constructor() {
+        this.notifications = [];
+        this.unreadCount = 0;
+        this.isOpen = false;
+        this.loadNotifications();
+    }
+    
+    addNotification(type, title, message) {
+        const notification = {
+            id: Date.now() + Math.random(),
+            type: type, // 'success', 'error', 'warning', 'info'
+            title: title,
+            message: message,
+            time: new Date(),
+            read: false
+        };
+        
+        this.notifications.unshift(notification);
+        this.unreadCount++;
+        this.saveNotifications();
+        this.updateBellIcon();
+        this.renderNotifications();
+        
+        return notification.id;
+    }
+    
+    markAsRead(notificationId) {
+        const notification = this.notifications.find(n => n.id === notificationId);
+        if (notification && !notification.read) {
+            notification.read = true;
+            this.unreadCount--;
+            this.saveNotifications();
+            this.updateBellIcon();
+            this.renderNotifications();
+        }
+    }
+    
+    clearAll() {
+        this.notifications = [];
+        this.unreadCount = 0;
+        this.saveNotifications();
+        this.updateBellIcon();
+        this.renderNotifications();
+    }
+    
+    toggle() {
+        this.isOpen = !this.isOpen;
+        const panel = document.getElementById('notificationPanel');
+        if (panel) {
+            panel.style.display = this.isOpen ? 'block' : 'none';
+        }
+        
+        if (this.isOpen) {
+            // Mark all as read when opening panel
+            this.notifications.forEach(n => {
+                if (!n.read) {
+                    n.read = true;
+                }
+            });
+            this.unreadCount = 0;
+            this.saveNotifications();
+            this.updateBellIcon();
+            this.renderNotifications();
+        }
+    }
+    
+    updateBellIcon() {
+        const countElement = document.getElementById('notificationCount');
+        if (countElement) {
+            if (this.unreadCount > 0) {
+                countElement.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+                countElement.style.display = 'flex';
+            } else {
+                countElement.style.display = 'none';
+            }
+        }
+    }
+    
+    renderNotifications() {
+        const listElement = document.getElementById('notificationList');
+        if (!listElement) return;
+        
+        if (this.notifications.length === 0) {
+            listElement.innerHTML = '<div class="no-notifications">No notifications yet</div>';
+            return;
+        }
+        
+        listElement.innerHTML = this.notifications.map(notification => {
+            const timeAgo = this.getTimeAgo(notification.time);
+            const icon = this.getNotificationIcon(notification.type);
+            
+            return `
+                <div class="notification-item ${!notification.read ? 'unread' : ''}" 
+                     onclick="notificationManager.markAsRead('${notification.id}')">
+                    <div class="notification-title">
+                        <span class="notification-icon">${icon}</span>
+                        ${notification.title}
+                    </div>
+                    <div class="notification-message">${notification.message}</div>
+                    <div class="notification-time">${timeAgo}</div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    getNotificationIcon(type) {
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        return icons[type] || 'ℹ️';
+    }
+    
+    getTimeAgo(date) {
+        const now = new Date();
+        const diffMs = now - new Date(date);
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffMinutes < 1) return 'Just now';
+        if (diffMinutes < 60) return `${diffMinutes}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return new Date(date).toLocaleDateString();
+    }
+    
+    saveNotifications() {
+        try {
+            // Keep only last 50 notifications
+            const toSave = this.notifications.slice(0, 50);
+            localStorage.setItem('adminNotifications', JSON.stringify(toSave));
+        } catch (error) {
+            console.error('Failed to save notifications:', error);
+        }
+    }
+    
+    loadNotifications() {
+        try {
+            const saved = localStorage.getItem('adminNotifications');
+            if (saved) {
+                this.notifications = JSON.parse(saved);
+                this.unreadCount = this.notifications.filter(n => !n.read).length;
+                this.updateBellIcon();
+            }
+        } catch (error) {
+            console.error('Failed to load notifications:', error);
+            this.notifications = [];
+            this.unreadCount = 0;
+        }
+    }
+}
+
+// Initialize notification manager
+const notificationManager = new NotificationManager();
+
+// Global functions for HTML onclick handlers
+function toggleNotifications() {
+    notificationManager.toggle();
+}
+
+function clearAllNotifications() {
+    notificationManager.clearAll();
+}
+
+// Close notification panel when clicking outside
+document.addEventListener('click', function(e) {
+    const notificationBell = document.getElementById('notificationBell');
+    const notificationPanel = document.getElementById('notificationPanel');
+    
+    if (notificationManager.isOpen && 
+        !notificationBell.contains(e.target) && 
+        !notificationPanel.contains(e.target)) {
+        notificationManager.toggle();
+    }
+});
+
+// Override toast manager to also add notifications
+const originalToastShow = toast.show;
+toast.show = function(type, title, message, duration) {
+    // Add to notification system (except for temporary info messages)
+    if (type !== 'info' || duration === 0) {
+        notificationManager.addNotification(type, title, message);
+    }
+    
+    // Call original toast functionality
+    return originalToastShow.call(this, type, title, message, duration);
+};
+
 // Make functions globally available
 window.loadCloudflareAnalytics = loadCloudflareAnalytics;
 window.setTimePeriod = setTimePeriod;
