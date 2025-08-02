@@ -784,16 +784,6 @@
                                 <button class="filter-btn active" onclick="setTimePeriod('30')">30d</button>
                                 <button class="filter-btn" onclick="setTimePeriod('90')">90d</button>
                             </div>
-                            <div class="period-selector">
-                                <label for="cfPeriodSelector">Custom Period:</label>
-                                <select id="cfPeriodSelector" onchange="loadCloudflareAnalytics()">
-                                    <option value="1">Last 24 hours</option>
-                                    <option value="7">Last 7 days</option>
-                                    <option value="14">Last 14 days</option>
-                                    <option value="30" selected>Last 30 days</option>
-                                    <option value="90">Last 90 days</option>
-                                </select>
-                            </div>
                             <button class="btn btn-outline" onclick="loadCloudflareAnalytics(true)">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <polyline points="23,4 23,10 17,10"></polyline>

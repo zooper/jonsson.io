@@ -2523,8 +2523,7 @@ function initializeDatabaseManagement() {
 // Cloudflare Analytics Functions
 async function loadCloudflareAnalytics(force = false) {
     try {
-        const periodSelector = document.getElementById('cfPeriodSelector');
-        const period = periodSelector ? periodSelector.value : '30';
+        const period = currentCloudflarePeriod;
         
         // Show loading state
         showCloudflareLoading();
@@ -2824,18 +2823,16 @@ function updateElement(id, value) {
 
 // Global variable to store current analytics data for drill-downs
 let currentAnalyticsData = null;
+let currentCloudflarePeriod = '30'; // Default to 30 days
 
 // Time Period Filter Functions
 function setTimePeriod(days) {
+    // Update current period
+    currentCloudflarePeriod = days;
+    
     // Update active filter button
     document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
-    
-    // Update dropdown
-    const selector = document.getElementById('cfPeriodSelector');
-    if (selector) {
-        selector.value = days;
-    }
     
     // Reload data
     loadCloudflareAnalytics();
