@@ -229,6 +229,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load initial section (photos)
     switchSection('photos');
+    
+    // Initialize database management
+    initializeDatabaseManagement();
 });
 
 // Logout function
@@ -2272,5 +2275,189 @@ async function exportVisitorData() {
     } catch (error) {
         console.error('Export failed:', error);
         toast.error('Export Failed', error.message);
+    }
+}
+
+// Database Management Functions
+async function loadDatabaseStatus() {
+    try {
+        const response = await fetch('/admin/api/database-version', {
+            headers: {
+                'Authorization': `Bearer ${adminToken}`
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to load database status');
+        
+        const data = await response.json();
+        updateDatabaseStatusDisplay(data);
+        
+    } catch (error) {
+        console.error('Error loading database status:', error);
+        const statusContainer = document.getElementById('databaseStatus');
+        statusContainer.innerHTML = `
+            <div class="error-message">
+                <div class="error-icon">⚠️</div>
+                <div class="error-text">
+                    <strong>Failed to load database status</strong>
+                    <p>${error.message}</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function updateDatabaseStatusDisplay(data) {
+    const statusContainer = document.getElementById('databaseStatus');
+    const actionsContainer = document.getElementById('databaseActions');
+    const upgradeBtn = document.getElementById('upgradeDbBtn');
+    
+    // Show current version status
+    const statusClass = data.needsUpgrade ? 'warning' : 'success';
+    const statusIcon = data.needsUpgrade ? '⚠️' : '✅';
+    const statusText = data.needsUpgrade ? 'Upgrade Available' : 'Up to Date';
+    
+    statusContainer.innerHTML = `
+        <div class="database-info">
+            <div class="version-status ${statusClass}">
+                <div class="status-icon">${statusIcon}</div>
+                <div class="status-content">
+                    <div class="status-title">${statusText}</div>
+                    <div class="status-description">
+                        Database Version: ${data.current.version} 
+                        ${data.needsUpgrade ? `(Target: ${data.target.version})` : ''}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="version-details">
+                <div class="detail-row">
+                    <span class="detail-label">Current Version:</span>
+                    <span class="detail-value">${data.current.version}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Description:</span>
+                    <span class="detail-value">${data.current.description}</span>
+                </div>
+                ${data.current.appliedAt ? `
+                    <div class="detail-row">
+                        <span class="detail-label">Applied:</span>
+                        <span class="detail-value">${new Date(data.current.appliedAt).toLocaleString()}</span>
+                    </div>
+                ` : ''}
+            </div>
+            
+            ${data.needsUpgrade ? `
+                <div class="upgrade-info">
+                    <h4>Available Upgrade</h4>
+                    <div class="upgrade-details">
+                        <p><strong>Target Version:</strong> ${data.target.version}</p>
+                        <p><strong>Description:</strong> ${data.target.description}</p>
+                        ${data.availableUpgrades.length > 0 ? `
+                            <div class="upgrade-changes">
+                                <strong>Changes:</strong>
+                                <ul>
+                                    ${data.availableUpgrades[0].changes.map(change => `<li>${change}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${data.migrationHistory && data.migrationHistory.length > 1 ? `
+                <div class="migration-history">
+                    <h4>Migration History</h4>
+                    <div class="history-list">
+                        ${data.migrationHistory.map(migration => `
+                            <div class="history-item">
+                                <span class="history-version">v${migration.version}</span>
+                                <span class="history-description">${migration.description}</span>
+                                <span class="history-date">${new Date(migration.applied_at).toLocaleDateString()}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    // Show actions and update upgrade button
+    actionsContainer.style.display = 'flex';
+    if (data.needsUpgrade) {
+        upgradeBtn.style.display = 'inline-flex';
+        upgradeBtn.onclick = () => upgradeDatabaseVersion(data.target.version);
+    } else {
+        upgradeBtn.style.display = 'none';
+    }
+}
+
+async function upgradeDatabaseVersion(targetVersion) {
+    const upgradeBtn = document.getElementById('upgradeDbBtn');
+    const originalText = upgradeBtn.innerHTML;
+    
+    // Show loading state
+    upgradeBtn.disabled = true;
+    upgradeBtn.innerHTML = `
+        <div class="spinner"></div>
+        Upgrading...
+    `;
+    
+    try {
+        const response = await fetch('/admin/api/database-upgrade', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${adminToken}`
+            },
+            body: JSON.stringify({ targetVersion })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Upgrade failed');
+        }
+        
+        if (result.success) {
+            toast.success('Database Upgraded', 
+                `Successfully upgraded from version ${result.fromVersion} to ${result.toVersion}`);
+            
+            // Refresh the database status display
+            setTimeout(() => loadDatabaseStatus(), 1000);
+            
+        } else {
+            throw new Error(result.message || 'Upgrade was not successful');
+        }
+        
+    } catch (error) {
+        console.error('Database upgrade failed:', error);
+        toast.error('Upgrade Failed', error.message);
+        
+        // Restore button state
+        upgradeBtn.disabled = false;
+        upgradeBtn.innerHTML = originalText;
+    }
+}
+
+// Initialize database management when settings section loads
+function initializeDatabaseManagement() {
+    // Add event listeners
+    const refreshDbBtn = document.getElementById('refreshDatabaseBtn');
+    if (refreshDbBtn) {
+        refreshDbBtn.addEventListener('click', loadDatabaseStatus);
+    }
+    
+    // Override switchSection to load database status when settings section is opened
+    const originalSwitchSection = window.switchSection;
+    if (originalSwitchSection) {
+        window.switchSection = function(sectionName) {
+            originalSwitchSection(sectionName);
+            
+            if (sectionName === 'settings') {
+                // Load database status with a small delay to ensure DOM is ready
+                setTimeout(() => loadDatabaseStatus(), 100);
+            }
+        };
     }
 }

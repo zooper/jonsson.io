@@ -251,27 +251,8 @@ class PhotoGallery {
     }
     
     setupNavigation() {
-        const navToggle = document.getElementById('nav-toggle');
-        const navMenu = document.getElementById('nav-menu');
-        
-        if (navToggle && navMenu) {
-            navToggle.addEventListener('click', () => {
-                navToggle.classList.toggle('active');
-                navMenu.classList.toggle('active');
-                
-                // Prevent body scroll when menu is open
-                document.body.style.overflow = navToggle.classList.contains('active') ? 'hidden' : '';
-            });
-            
-            // Close menu when clicking nav links
-            navMenu.querySelectorAll('.nav-link').forEach(link => {
-                link.addEventListener('click', () => {
-                    navToggle.classList.remove('active');
-                    navMenu.classList.remove('active');
-                    document.body.style.overflow = '';
-                });
-            });
-        }
+        // Navigation setup no longer needed since hamburger menu was removed
+        // Nav links will work with default anchor behavior for smooth scrolling
     }
     
     setupIntersectionObserver() {
@@ -479,7 +460,8 @@ class PhotoGallery {
         // Update quote
         const heroQuote = document.getElementById('heroQuote');
         if (heroQuote && data.quote) {
-            heroQuote.textContent = `"${data.quote}"`;
+            // Don't add quotes here - the CSS ::before and ::after will add the decorative red quotes
+            heroQuote.textContent = data.quote;
         }
         
         // Update featured image

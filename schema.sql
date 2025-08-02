@@ -1,3 +1,18 @@
+-- Database schema for jonsson.io photography website
+-- Current version: 3
+
+-- Database version tracking
+CREATE TABLE IF NOT EXISTS database_version (
+    id INTEGER PRIMARY KEY,
+    version INTEGER NOT NULL,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    description TEXT
+);
+
+-- Insert current version if not exists
+INSERT OR IGNORE INTO database_version (id, version, description) 
+VALUES (1, 3, 'Base schema with visitor analytics and response code tracking');
+
 -- Photos table for storing photo metadata and EXIF data
 CREATE TABLE IF NOT EXISTS photos (
   id TEXT PRIMARY KEY,

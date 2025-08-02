@@ -218,6 +218,18 @@ async function handleAdminRequest(request, env, pathname) {
                 return handleGenerateTestVisitors(request, env);
             }
             break;
+            
+        case '/admin/api/database-version':
+            if (request.method === 'GET') {
+                return handleGetDatabaseVersion(request, env);
+            }
+            break;
+            
+        case '/admin/api/database-upgrade':
+            if (request.method === 'POST') {
+                return handleDatabaseUpgrade(request, env);
+            }
+            break;
     }
     
     // Serve static admin files
@@ -2644,6 +2656,199 @@ async function handleGenerateTestVisitors(request, env) {
     } catch (error) {
         console.error('Error generating test visitors:', error);
         return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+// Database Version Management Functions
+async function handleGetDatabaseVersion(request, env) {
+    try {
+        // Get current database version
+        const currentVersion = await env.DB.prepare(`
+            SELECT version, applied_at, description 
+            FROM database_version 
+            ORDER BY version DESC 
+            LIMIT 1
+        `).first();
+        
+        // Check if any schema changes are needed
+        const targetVersion = 3; // Current target version from schema.sql
+        const needsUpgrade = !currentVersion || currentVersion.version < targetVersion;
+        
+        // Get migration history
+        const migrationHistory = await env.DB.prepare(`
+            SELECT version, applied_at, description 
+            FROM database_version 
+            ORDER BY version DESC
+        `).all();
+        
+        return new Response(JSON.stringify({
+            current: {
+                version: currentVersion?.version || 0,
+                appliedAt: currentVersion?.applied_at || null,
+                description: currentVersion?.description || 'No version found'
+            },
+            target: {
+                version: targetVersion,
+                description: 'Base schema with visitor analytics and response code tracking'
+            },
+            needsUpgrade: needsUpgrade,
+            availableUpgrades: needsUpgrade ? [{
+                fromVersion: currentVersion?.version || 0,
+                toVersion: targetVersion,
+                description: 'Update to latest schema with visitor analytics and response code tracking',
+                changes: [
+                    'Add visitor_sessions table',
+                    'Add page_views table with response code tracking',
+                    'Add database version tracking',
+                    'Create optimized indexes for analytics queries'
+                ]
+            }] : [],
+            migrationHistory: migrationHistory.results || []
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error getting database version:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'Failed to get database version information'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function handleDatabaseUpgrade(request, env) {
+    try {
+        const { targetVersion } = await request.json();
+        
+        if (!targetVersion || typeof targetVersion !== 'number') {
+            return new Response(JSON.stringify({ 
+                error: 'Target version must be specified as a number' 
+            }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Get current version
+        const currentVersionRow = await env.DB.prepare(`
+            SELECT version FROM database_version ORDER BY version DESC LIMIT 1
+        `).first();
+        
+        const currentVersion = currentVersionRow?.version || 0;
+        
+        if (currentVersion >= targetVersion) {
+            return new Response(JSON.stringify({ 
+                success: false,
+                message: `Database is already at version ${currentVersion}, no upgrade needed to version ${targetVersion}`
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        const migrations = [];
+        let migratedToVersion = currentVersion;
+        
+        // Migration from version 0 to 3 (full schema setup)
+        if (currentVersion < 3) {
+            try {
+                // Create visitor analytics tables
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS visitor_sessions (
+                        id TEXT PRIMARY KEY,
+                        ip_hash TEXT NOT NULL,
+                        session_start DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        session_end DATETIME,
+                        user_agent TEXT,
+                        country_code TEXT,
+                        country_name TEXT,
+                        city TEXT,
+                        region TEXT,
+                        browser TEXT,
+                        device_type TEXT,
+                        os TEXT,
+                        referrer TEXT,
+                        page_views INTEGER DEFAULT 0,
+                        duration_seconds INTEGER DEFAULT 0
+                    )
+                `).run();
+                migrations.push('Created visitor_sessions table');
+                
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS page_views (
+                        id TEXT PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        page_url TEXT NOT NULL,
+                        page_title TEXT,
+                        viewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        time_on_page INTEGER DEFAULT 0,
+                        response_code INTEGER DEFAULT 200,
+                        response_time_ms INTEGER DEFAULT 0,
+                        FOREIGN KEY (session_id) REFERENCES visitor_sessions(id) ON DELETE CASCADE
+                    )
+                `).run();
+                migrations.push('Created page_views table with response code tracking');
+                
+                // Create indexes for performance
+                const indexes = [
+                    'CREATE INDEX IF NOT EXISTS idx_visitor_sessions_start ON visitor_sessions(session_start)',
+                    'CREATE INDEX IF NOT EXISTS idx_visitor_sessions_country ON visitor_sessions(country_code)',
+                    'CREATE INDEX IF NOT EXISTS idx_visitor_sessions_device ON visitor_sessions(device_type)',
+                    'CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id)',
+                    'CREATE INDEX IF NOT EXISTS idx_page_views_url ON page_views(page_url)',
+                    'CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at ON page_views(viewed_at)',
+                    'CREATE INDEX IF NOT EXISTS idx_page_views_response_code ON page_views(response_code)'
+                ];
+                
+                for (const indexSQL of indexes) {
+                    await env.DB.prepare(indexSQL).run();
+                }
+                migrations.push('Created analytics performance indexes');
+                
+                // Update to version 3
+                await env.DB.prepare(`
+                    INSERT OR REPLACE INTO database_version (id, version, description, applied_at)
+                    VALUES (1, 3, 'Analytics schema upgrade - visitor tracking and response codes', CURRENT_TIMESTAMP)
+                `).run();
+                
+                migratedToVersion = 3;
+                migrations.push('Updated database to version 3');
+                
+            } catch (migrationError) {
+                console.error('Migration error:', migrationError);
+                return new Response(JSON.stringify({ 
+                    error: `Migration failed: ${migrationError.message}`,
+                    completedMigrations: migrations
+                }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+        }
+        
+        return new Response(JSON.stringify({
+            success: true,
+            message: `Database successfully upgraded from version ${currentVersion} to version ${migratedToVersion}`,
+            fromVersion: currentVersion,
+            toVersion: migratedToVersion,
+            migrations: migrations,
+            timestamp: new Date().toISOString()
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Error during database upgrade:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'Database upgrade failed'
+        }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });

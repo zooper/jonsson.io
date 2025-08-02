@@ -2691,3 +2691,232 @@ textarea:focus-visible {
         font-size: 0.625rem;
     }
 }
+
+/* Database Management Styles */
+.database-status {
+    margin-bottom: 1.5rem;
+}
+
+.database-info {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.version-status {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    gap: 1rem;
+}
+
+.version-status.success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.1) 100%);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.version-status.warning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.1) 100%);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.status-icon {
+    font-size: 1.5rem;
+}
+
+.status-content {
+    flex: 1;
+}
+
+.status-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+.status-description {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.version-details {
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.detail-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.upgrade-info {
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.upgrade-info h4 {
+    color: var(--warning-color);
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.upgrade-details p {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.upgrade-changes {
+    margin-top: 0.75rem;
+}
+
+.upgrade-changes ul {
+    margin-top: 0.5rem;
+    margin-left: 1.5rem;
+}
+
+.upgrade-changes li {
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.migration-history {
+    padding: 1rem;
+    background: var(--bg-secondary);
+}
+
+.migration-history h4 {
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.history-version {
+    background: var(--primary-color);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    min-width: 40px;
+    text-align: center;
+}
+
+.history-description {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.history-date {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.database-actions {
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.database-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.database-actions .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    color: var(--error-color);
+}
+
+.error-icon {
+    font-size: 1.5rem;
+}
+
+.error-text strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.error-text p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Responsive database management */
+@media (max-width: 768px) {
+    .detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    .history-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .history-version {
+        align-self: flex-start;
+    }
+    
+    .database-actions {
+        flex-direction: column;
+    }
+}
