@@ -5,8 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 # Custom domain configuration
 routes = [
-  { pattern = "jonsson.io/*", custom_domain = true },
-  { pattern = "www.jonsson.io/*", custom_domain = true }
+  "jonsson.io",
+  "www.jonsson.io"
 ]
 
 # Static assets configuration
