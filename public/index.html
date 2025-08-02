@@ -52,16 +52,6 @@
                     </div>
                 </div>
                 
-                <div class="hero-stats glass-card">
-                    <div class="stat">
-                        <div class="stat-number" id="photo-count">0</div>
-                        <div class="stat-label">Photos</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">2025</div>
-                        <div class="stat-label">Est.</div>
-                    </div>
-                </div>
                 
                 <div class="hero-featured glass-card" id="hero-featured">
                     <div class="featured-placeholder" id="heroFeaturedPlaceholder">
@@ -186,7 +176,12 @@
                 </div>
             </div>
             
-            <div class="lightbox-info">
+            <div class="lightbox-info" id="lightbox-info">
+                <button class="info-toggle" onclick="toggleLightboxInfo()" title="Toggle info (Press 'i')">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                </button>
                 <h3 class="lightbox-title"></h3>
                 <p class="lightbox-description"></p>
                 <div class="lightbox-meta">

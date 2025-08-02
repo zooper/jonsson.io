@@ -291,7 +291,6 @@ body {
     grid-template-areas:
         "main"
         "featured"
-        "stats"
         "quote";
 }
 
@@ -387,32 +386,6 @@ body {
     transform: translate(2px, -2px);
 }
 
-.hero-stats {
-    grid-area: stats;
-    padding: var(--spacing-lg);
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-}
-
-.stat {
-    text-align: center;
-}
-
-.stat-number {
-    font-family: var(--font-primary);
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--accent-primary);
-    display: block;
-}
-
-.stat-label {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
 
 .hero-featured {
     grid-area: featured;
@@ -943,9 +916,43 @@ body {
     z-index: 10;
 }
 
-.lightbox-container:hover .lightbox-info {
+.lightbox-info.visible {
     transform: translateY(0);
 }
+
+.info-toggle {
+    position: absolute;
+    top: -50px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    z-index: 11;
+}
+
+.info-toggle:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+.info-toggle svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Remove the hover behavior - now only controlled by toggle */
+/* .lightbox-container:hover .lightbox-info {
+    transform: translateY(0);
+} */
 
 .lightbox-title {
     font-size: 1.3rem;
@@ -1071,7 +1078,7 @@ body {
         grid-template-columns: 2fr 1fr;
         grid-template-rows: auto auto;
         grid-template-areas:
-            "main stats"
+            "main main"
             "featured quote";
     }
     
@@ -1163,7 +1170,7 @@ body {
         grid-template-columns: 2fr 1fr 1fr;
         grid-template-rows: auto auto;
         grid-template-areas:
-            "main main stats"
+            "main main main"
             "featured quote quote";
     }
     

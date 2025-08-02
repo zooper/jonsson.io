@@ -331,6 +331,9 @@ class PhotoGallery {
         // Update EXIF data
         this.updateExifDisplay(lightbox, photo.exif);
         
+        // Keep info bar visibility state when navigating between photos
+        // Only reset when opening lightbox for the first time
+        
         // Show lightbox with animation
         lightbox.classList.add('active');
         document.body.style.overflow = 'hidden';
@@ -353,6 +356,12 @@ class PhotoGallery {
         lightbox.classList.remove('active');
         document.body.style.overflow = '';
         this.lightboxOpen = false;
+        
+        // Reset info bar visibility when closing lightbox
+        const lightboxInfo = document.getElementById('lightbox-info');
+        if (lightboxInfo) {
+            lightboxInfo.classList.remove('visible');
+        }
     }
     
     nextImage() {
@@ -381,6 +390,11 @@ class PhotoGallery {
             case 'ArrowLeft':
                 e.preventDefault();
                 this.prevImage();
+                break;
+            case 'i':
+            case 'I':
+                e.preventDefault();
+                this.toggleLightboxInfo();
                 break;
         }
     }
@@ -479,10 +493,14 @@ class PhotoGallery {
     }
     
     updatePhotoCount() {
-        const photoCountEl = document.getElementById('photo-count');
-        if (photoCountEl) {
-            const targetCount = this.photos.length;
-            this.animateNumber(photoCountEl, 0, targetCount, 1000);
+        // Photo count element removed from UI
+        // This method kept for compatibility but does nothing
+    }
+    
+    toggleLightboxInfo() {
+        const lightboxInfo = document.getElementById('lightbox-info');
+        if (lightboxInfo) {
+            lightboxInfo.classList.toggle('visible');
         }
     }
     
@@ -615,6 +633,7 @@ window.openLightbox = (index) => gallery.openLightbox(index);
 window.closeLightbox = () => gallery.closeLightbox();
 window.nextImage = () => gallery.nextImage();
 window.prevImage = () => gallery.prevImage();
+window.toggleLightboxInfo = () => gallery.toggleLightboxInfo();
 
 // Simple theme toggle function for immediate functionality
 window.toggleTheme = () => {
