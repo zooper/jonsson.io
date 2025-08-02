@@ -42,6 +42,29 @@ export default {
             response = await env.ASSETS.fetch(request);
             responseCode = response.status;
             
+            // Handle 404 errors with custom page
+            if (response.status === 404) {
+                try {
+                    const custom404Request = new Request(new URL('/404.html', request.url));
+                    const custom404Response = await env.ASSETS.fetch(custom404Request);
+                    
+                    if (custom404Response.ok) {
+                        // Return custom 404 page with proper 404 status
+                        response = new Response(custom404Response.body, {
+                            status: 404,
+                            statusText: 'Not Found',
+                            headers: {
+                                'Content-Type': 'text/html',
+                                'Cache-Control': 'public, max-age=300'
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error('Failed to serve custom 404 page:', error);
+                    // Fall back to default 404 if custom page fails
+                }
+            }
+            
             // Track visitor data for public pages (exclude admin)
             const responseTime = Date.now() - startTime;
             await trackVisitor(request, env, responseCode, responseTime);

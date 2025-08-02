@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>404 - Page Not Found | jonsson.io</title>
+    <meta name="description" content="Oops! This page seems to have wandered off like a curious photographer">
+    <meta name="theme-color" content="#0a0a0f">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/themes/leica.css" id="theme-stylesheet">
+    <style>
+        /* Prevent FOUC during theme loading */
+        body { opacity: 0; transition: opacity 0.3s ease; }
+        body.theme-loaded { opacity: 1; }
+        
+        /* 404-specific styles */
+        .error-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background: var(--bg-primary);
+        }
+        
+        .error-card {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            padding: 3rem 2rem;
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .error-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--gradient-bg);
+            opacity: 0.1;
+            z-index: 0;
+        }
+        
+        .error-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .error-code {
+            font-size: 8rem;
+            font-weight: 800;
+            background: var(--gradient-text);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 1rem;
+            font-family: var(--font-display);
+        }
+        
+        .error-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            font-family: var(--font-display);
+        }
+        
+        .error-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .error-message {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            font-style: italic;
+            color: var(--text-secondary);
+        }
+        
+        .error-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+        
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.875rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        
+        .action-btn.secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .camera-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 2rem;
+            opacity: 0.6;
+            color: var(--accent);
+        }
+        
+        .fun-facts {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .fun-fact {
+            font-size: 0.9rem;
+            color: var(--text-tertiary);
+            margin: 0.5rem 0;
+        }
+        
+        @media (max-width: 768px) {
+            .error-code {
+                font-size: 6rem;
+            }
+            
+            .error-title {
+                font-size: 2rem;
+            }
+            
+            .error-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .action-btn {
+                width: 100%;
+                max-width: 280px;
+                justify-content: center;
+            }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Crimson+Text:wght@400;600&family=Courier+Prime:wght@400;700&family=Dancing+Script:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-card">
+            <div class="error-content">
+                <!-- Camera Icon -->
+                <div class="camera-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 2l3 3h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h3zm3 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                    </svg>
+                </div>
+                
+                <div class="error-code">404</div>
+                <h1 class="error-title">Photo Not Found</h1>
+                <p class="error-subtitle">Looks like this page wandered off while I was adjusting my camera settings</p>
+                
+                <div class="error-message">
+                    "The best photographs are often the ones that got away... but unfortunately, so did this page."
+                </div>
+                
+                <div class="error-actions">
+                    <a href="/" class="action-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                            <polyline points="9,22 9,12 15,12 15,22"/>
+                        </svg>
+                        Back to Gallery
+                    </a>
+                    <button onclick="history.back()" class="action-btn secondary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 12H6M12 5l-7 7 7 7"/>
+                        </svg>
+                        Previous Page
+                    </button>
+                </div>
+                
+                <div class="fun-facts">
+                    <div class="fun-fact">💡 Fun fact: This 404 error is like a missed shot – you know it happened, but there's no photo to prove it</div>
+                    <div class="fun-fact">📸 Camera joke: Why don't 404 errors make good photographers? Because they can't find their focus!</div>
+                    <div class="fun-fact">🎯 Error code 404 was named after a room at CERN where the web was born – much like how every photo has an origin story</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Theme Loading Script -->
+    <script>
+        // Load the current theme
+        async function loadCurrentTheme() {
+            try {
+                // Add timeout for mobile networks
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                
+                const response = await fetch('/api/theme', {
+                    signal: controller.signal,
+                    cache: 'force-cache'
+                });
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const themeStylesheet = document.getElementById('theme-stylesheet');
+                    
+                    // Check if theme needs to change
+                    const currentHref = themeStylesheet.href;
+                    const newThemeUrl = new URL(data.cssUrl, window.location.origin).href;
+                    
+                    if (currentHref === newThemeUrl) {
+                        // Theme is already correct, just show page
+                        document.body.classList.add('theme-loaded');
+                        return;
+                    }
+                    
+                    if (themeStylesheet && data.cssUrl) {
+                        // Create a new link element to avoid loading issues
+                        const newThemeLink = document.createElement('link');
+                        newThemeLink.rel = 'stylesheet';
+                        newThemeLink.href = data.cssUrl;
+                        newThemeLink.id = 'theme-stylesheet-new';
+                        
+                        // Set timeout for CSS loading
+                        const cssTimeout = setTimeout(() => {
+                            console.warn('Theme CSS loading timed out, showing default');
+                            document.body.classList.add('theme-loaded');
+                        }, 2000);
+                        
+                        // Wait for the new theme to load before replacing
+                        newThemeLink.onload = () => {
+                            clearTimeout(cssTimeout);
+                            themeStylesheet.remove();
+                            newThemeLink.id = 'theme-stylesheet';
+                            document.body.classList.add('theme-loaded');
+                        };
+                        
+                        newThemeLink.onerror = () => {
+                            clearTimeout(cssTimeout);
+                            console.error('Failed to load theme CSS:', data.cssUrl);
+                            newThemeLink.remove();
+                            document.body.classList.add('theme-loaded');
+                        };
+                        
+                        // Start loading the new theme
+                        document.head.appendChild(newThemeLink);
+                    } else {
+                        document.body.classList.add('theme-loaded');
+                    }
+                } else {
+                    console.warn('Theme API failed:', response.status);
+                    document.body.classList.add('theme-loaded');
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.warn('Theme API request timed out');
+                } else {
+                    console.error('Failed to load theme:', error);
+                }
+                document.body.classList.add('theme-loaded');
+            }
+        }
+        
+        // Initialize page
+        async function initializePage() {
+            await loadCurrentTheme();
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
+    </script>
+</body>
+</html>
