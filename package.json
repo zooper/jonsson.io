@@ -5,10 +5,11 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "build": "node scripts/build.js",
-    "start": "node src/index.js",
-    "test": "node --test test/**/*.test.js"
+    "dev": "wrangler dev",
+    "build": "echo 'Build completed - using Cloudflare Workers'",
+    "start": "wrangler dev",
+    "test": "node --test test/**/*.test.js",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "backblaze-b2": "^1.7.1",
