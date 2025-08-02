@@ -8,6 +8,70 @@ import { ExifExtractor } from './exif.js';
 import { PhotoDatabase } from './database.js';
 import { LocationService } from './location.js';
 
+// Sanitized error responses to prevent information disclosure
+function createErrorResponse(status, publicMessage, internalError = null) {
+    // Log internal errors for debugging but don't expose them
+    if (internalError) {
+        console.error('Internal error:', internalError);
+    }
+    
+    const errorMessages = {
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        403: 'Forbidden', 
+        404: 'Not Found',
+        405: 'Method Not Allowed',
+        429: 'Too Many Requests',
+        500: 'Internal Server Error',
+        503: 'Service Temporarily Unavailable'
+    };
+    
+    return new Response(JSON.stringify({
+        error: errorMessages[status] || 'Unknown Error',
+        message: publicMessage || errorMessages[status] || 'An error occurred'
+    }), {
+        status: status,
+        headers: { 'Content-Type': 'application/json' }
+    });
+}
+
+// Security headers to apply to all responses
+function addSecurityHeaders(response) {
+    const headers = new Headers(response.headers);
+    
+    // Content Security Policy - Strict but functional for photo gallery
+    headers.set('Content-Security-Policy', 
+        "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "font-src 'self' https://fonts.gstatic.com; " +
+        "img-src 'self' data: https:; " +
+        "connect-src 'self' https://api.openai.com https://nominatim.openstreetmap.org; " +
+        "frame-ancestors 'none';"
+    );
+    
+    // Prevent clickjacking
+    headers.set('X-Frame-Options', 'DENY');
+    
+    // Prevent MIME type sniffing
+    headers.set('X-Content-Type-Options', 'nosniff');
+    
+    // Referrer policy for privacy
+    headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    
+    // Permissions policy - disable potentially dangerous features
+    headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+    
+    // HSTS for HTTPS enforcement (if using HTTPS)
+    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    
+    return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: headers
+    });
+}
+
 export default {
     async fetch(request, env, ctx) {
         const startTime = Date.now();
@@ -22,7 +86,7 @@ export default {
             if (pathname.startsWith('/admin')) {
                 response = await handleAdminRequest(request, env, pathname);
                 responseCode = response.status;
-                return response;
+                return addSecurityHeaders(response);
             }
             
             // API Routes only - static files handled by Cloudflare Assets
@@ -34,7 +98,7 @@ export default {
                 const responseTime = Date.now() - startTime;
                 await trackVisitor(request, env, responseCode, responseTime);
                 
-                return response;
+                return addSecurityHeaders(response);
             }
 
             // Let Cloudflare Assets handle static files
@@ -69,7 +133,7 @@ export default {
             const responseTime = Date.now() - startTime;
             await trackVisitor(request, env, responseCode, responseTime);
 
-            return response;
+            return addSecurityHeaders(response);
 
         } catch (error) {
             console.error('Worker error:', error);
@@ -80,7 +144,7 @@ export default {
             const responseTime = Date.now() - startTime;
             await trackVisitor(request, env, responseCode, responseTime);
             
-            return response;
+            return addSecurityHeaders(response);
         }
     }
 };
@@ -96,7 +160,7 @@ async function handleAdminRequest(request, env, pathname) {
         const authHeader = request.headers.get('Authorization');
         
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return new Response('Unauthorized', { status: 401 });
+            return createErrorResponse(401, 'Authentication required');
         }
         
         const token = authHeader.substring(7); // Remove 'Bearer '
@@ -104,7 +168,7 @@ async function handleAdminRequest(request, env, pathname) {
         // JWT validation only
         const isValidJWT = await validateJWT(token, env);
         if (!isValidJWT) {
-            return new Response('Unauthorized', { status: 401 });
+            return createErrorResponse(401, 'Invalid authentication');
         }
     }
     
@@ -292,24 +356,7 @@ async function handleAdminRequest(request, env, pathname) {
 async function handleApiRequest(request, env, pathname) {
     const storage = new B2Storage(env);
 
-    // Check if endpoint requires authentication
-    const protectedEndpoints = ['/api/debug', '/api/test-exif', '/api/test-upload', '/api/debug-db'];
-    
-    if (protectedEndpoints.includes(pathname)) {
-        const authHeader = request.headers.get('Authorization');
-        
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-        
-        const token = authHeader.substring(7);
-        
-        // JWT validation only
-        const isValidJWT = await validateJWT(token, env);
-        if (!isValidJWT) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-    }
+    // No debug endpoints in production
 
     try {
         switch (pathname) {
@@ -318,18 +365,6 @@ async function handleApiRequest(request, env, pathname) {
             
             case '/api/photos/map':
                 return handlePhotosMapRequest(env.DB);
-            
-            case '/api/debug':
-                return handleDebugRequest(storage, request);
-            
-            case '/api/test-exif':
-                return handleTestExifRequest(storage, request);
-            
-            case '/api/test-upload':
-                return handleTestUploadRequest(storage, request);
-            
-            case '/api/debug-db':
-                return handleDebugDbRequest(request, env);
             
             case '/api/theme':
                 return handleGetCurrentTheme(request, env);
@@ -344,11 +379,7 @@ async function handleApiRequest(request, env, pathname) {
                 return new Response('API endpoint not found', { status: 404 });
         }
     } catch (error) {
-        console.error('API error:', error);
-        return new Response(JSON.stringify({ error: 'Internal server error' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return createErrorResponse(500, 'Unable to process request', error);
     }
 }
 
@@ -374,11 +405,7 @@ async function handlePhotosRequest(storage, request, db) {
         });
 
     } catch (error) {
-        console.error('Error fetching photos:', error);
-        return new Response(JSON.stringify({ error: 'Failed to fetch photos' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return createErrorResponse(500, 'Unable to load photos', error);
     }
 }
 
@@ -397,63 +424,10 @@ async function handlePhotosMapRequest(db) {
             }
         });
     } catch (error) {
-        console.error('Error loading photos for map:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Failed to load photos for map',
-            photos: []
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return createErrorResponse(500, 'Unable to load map data', error);
     }
 }
 
-async function handleDebugRequest(storage, request) {
-    try {
-        // Test B2 authentication and list files
-        await storage.authenticate();
-        
-        // Get all files (not just photos/ prefix)
-        const allFiles = await storage.listFiles('', 10);
-        
-        // Get photos specifically
-        const photoFiles = await storage.listFiles('photos/', 10);
-        
-        return new Response(JSON.stringify({
-            message: 'B2 connection successful',
-            credentials: {
-                keyId: storage.keyId ? 'Set' : 'Missing',
-                bucketName: storage.bucketName || 'Missing',
-                bucketId: storage.bucketId ? 'Set' : 'Missing'
-            },
-            allFiles: allFiles.length,
-            photoFiles: photoFiles.length,
-            sampleFiles: allFiles.map(f => ({ name: f.name, size: f.size })),
-            samplePhotos: photoFiles.map(f => ({ 
-                name: f.name, 
-                size: f.size, 
-                url: f.url,
-                exif: f.exif,
-                rawFileInfo: f.rawFileInfo
-            }))
-        }, null, 2), {
-            headers: { 'Content-Type': 'application/json' }
-        });
-    } catch (error) {
-        return new Response(JSON.stringify({
-            error: 'B2 connection failed',
-            message: error.message,
-            credentials: {
-                keyId: storage.keyId ? 'Set' : 'Missing',
-                bucketName: storage.bucketName || 'Missing',
-                bucketId: storage.bucketId ? 'Set' : 'Missing'
-            }
-        }, null, 2), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-}
 
 function extractTitleFromFileName(fileName) {
     // Remove extension and path
@@ -491,10 +465,7 @@ async function handleAdminUpload(request, env) {
         const file = formData.get('photo');
         
         if (!file) {
-            return new Response(JSON.stringify({ error: 'No file uploaded' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(400, 'No file provided');
         }
         
         // Generate filename with more unique timestamp
@@ -603,11 +574,7 @@ async function handleAdminUpload(request, env) {
         });
         
     } catch (error) {
-        console.error('Upload handler error:', error);
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return createErrorResponse(500, 'Upload failed', error);
     }
 }
 
@@ -1120,23 +1087,13 @@ async function handleRequestMagicLink(request, env) {
         const { email } = await request.json();
         
         if (!email) {
-            return new Response(JSON.stringify({ 
-                error: 'Email is required' 
-            }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(400, 'Email address required');
         }
         
         // Verify this is the admin email
         const adminEmail = env.ADMIN_EMAIL;
         if (!adminEmail || email.toLowerCase() !== adminEmail.toLowerCase()) {
-            return new Response(JSON.stringify({ 
-                error: 'Invalid email address' 
-            }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(401, 'Access denied');
         }
         
         // Generate secure token
@@ -1176,13 +1133,7 @@ async function handleRequestMagicLink(request, env) {
         });
         
     } catch (error) {
-        console.error('Magic link request error:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Failed to send magic link' 
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return createErrorResponse(500, 'Unable to send login link', error);
     }
 }
 
@@ -1191,12 +1142,7 @@ async function handleVerifyMagicLink(request, env) {
         const { token } = await request.json();
         
         if (!token) {
-            return new Response(JSON.stringify({ 
-                error: 'Token is required' 
-            }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(400, 'Login token required');
         }
         
         // Find and verify token
@@ -1207,34 +1153,19 @@ async function handleVerifyMagicLink(request, env) {
         `).bind(token).first();
         
         if (!magicLink) {
-            return new Response(JSON.stringify({ 
-                error: 'Invalid or expired magic link' 
-            }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(401, 'Invalid or expired login link');
         }
         
         // Check if already used
         if (magicLink.used_at) {
-            return new Response(JSON.stringify({ 
-                error: 'Magic link has already been used' 
-            }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(401, 'Login link already used');
         }
         
         // Check if expired
         const now = new Date();
         const expiresAt = new Date(magicLink.expires_at);
         if (now > expiresAt) {
-            return new Response(JSON.stringify({ 
-                error: 'Magic link has expired' 
-            }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return createErrorResponse(401, 'Login link expired');
         }
         
         // Mark as used
@@ -1256,13 +1187,7 @@ async function handleVerifyMagicLink(request, env) {
         });
         
     } catch (error) {
-        console.error('Magic link verification error:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Failed to verify magic link' 
-        }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return createErrorResponse(500, 'Login verification failed', error);
     }
 }
 
@@ -1476,133 +1401,8 @@ async function validateJWT(token, env) {
     }
 }
 
-async function handleTestExifRequest(storage, request) {
-    const exifExtractor = new ExifExtractor();
-    
-    try {
-        // Get the first photo file
-        const files = await storage.listFiles('photos/', 1);
-        if (files.length === 0) {
-            return new Response(JSON.stringify({ error: 'No photos found' }), {
-                status: 404,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-        
-        const file = files[0];
-        
-        // Download the file
-        const fileResponse = await fetch(file.url);
-        if (!fileResponse.ok) {
-            throw new Error('Failed to download file');
-        }
-        
-        const fileData = await fileResponse.arrayBuffer();
-        
-        // Extract raw EXIF data
-        const rawExifData = await exifExtractor.extractExif(fileData);
-        
-        return new Response(JSON.stringify({
-            fileName: file.name,
-            fileSize: fileData.byteLength,
-            rawExifData: rawExifData,
-            currentStoredData: file.exif,
-            rawFileInfo: file.rawFileInfo
-        }, null, 2), {
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-    } catch (error) {
-        return new Response(JSON.stringify({
-            error: 'EXIF test failed',
-            message: error.message
-        }, null, 2), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-}
 
-async function handleTestUploadRequest(storage, request) {
-    try {
-        // Test B2 authentication
-        await storage.authenticate();
-        
-        // Test getting an upload URL
-        const uploadUrlResponse = await fetch(`${storage.apiUrl}/b2api/v2/b2_get_upload_url`, {
-            method: 'POST',
-            headers: {
-                'Authorization': storage.authToken,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                bucketId: storage.bucketId
-            })
-        });
-        
-        const uploadUrlData = await uploadUrlResponse.json();
-        
-        return new Response(JSON.stringify({
-            message: 'Upload test successful',
-            authToken: storage.authToken ? 'Present' : 'Missing',
-            apiUrl: storage.apiUrl,
-            bucketId: storage.bucketId,
-            uploadUrlResponse: {
-                ok: uploadUrlResponse.ok,
-                status: uploadUrlResponse.status,
-                statusText: uploadUrlResponse.statusText,
-                data: uploadUrlData
-            }
-        }, null, 2), {
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-    } catch (error) {
-        return new Response(JSON.stringify({
-            error: 'Upload test failed',
-            message: error.message,
-            stack: error.stack
-        }, null, 2), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-}
 
-async function handleDebugDbRequest(request, env) {
-    try {
-        const photoDb = new PhotoDatabase(env.DB);
-        
-        // Get all photos from database
-        const photos = await photoDb.listPhotos(10);
-        
-        // Also get raw database rows to see what's actually stored
-        const rawRows = await photoDb.db.prepare(`
-            SELECT * FROM photos 
-            ORDER BY upload_date DESC 
-            LIMIT 5
-        `).all();
-        
-        return new Response(JSON.stringify({
-            message: 'Database debug info',
-            photoCount: photos.length,
-            formattedPhotos: photos,
-            rawDatabaseRows: rawRows.results
-        }, null, 2), {
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-    } catch (error) {
-        return new Response(JSON.stringify({
-            error: 'Database debug failed',
-            message: error.message,
-            stack: error.stack
-        }, null, 2), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-}
 
 // Theme Management Functions
 
