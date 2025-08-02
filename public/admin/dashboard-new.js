@@ -485,12 +485,15 @@ async function handleFiles(files) {
     uploadProgress.style.display = 'none';
     uploadStatus.innerHTML += '<br>✅ Upload complete!';
     
-    // Show toast notification with quote generation summary
+    // Track the upload activity
+    const photoCount = files.length;
     const quotesGenerated = uploadStatus && uploadStatus.innerHTML.includes('🤖 AI quote generated');
     
     if (quotesGenerated) {
+        activityTracker.trackActivity('upload', `Uploaded ${photoCount} photos with AI quotes`, 'Bulk upload with quote generation');
         toast.success('Upload Complete', 'Photos uploaded and AI quotes generated automatically!');
     } else {
+        activityTracker.trackActivity('upload', `Uploaded ${photoCount} photos`, 'Bulk upload');
         toast.info('Upload Complete', 'Photos uploaded successfully');
     }
     
@@ -911,7 +914,12 @@ async function applyTheme(themeId) {
         
         if (response.ok) {
             const data = await response.json();
-            toast.success('Theme Applied', `${themes.find(t => t.id === themeId)?.name} theme is now active on your website!`);
+            const themeName = themes.find(t => t.id === themeId)?.name || themeId;
+            
+            // Track the theme change activity
+            activityTracker.trackActivity('theme', `Applied ${themeName} theme`, 'Website appearance updated');
+            
+            toast.success('Theme Applied', `${themeName} theme is now active on your website!`);
             
             // Update the current active theme
             currentActiveTheme = themeId;
@@ -1209,11 +1217,13 @@ async function refreshHeroQuote() {
             displayHeroQuote(result);
             await loadAIStatus();
             
-            // Show success notification
+            // Track the activity
             const aiGenerated = result.quote !== "Every photograph is a window into a moment that will never happen again";
             if (aiGenerated) {
+                activityTracker.trackActivity('ai_quote', 'Generated new AI hero quote', 'Manual refresh');
                 toast.success('Quote Generated', 'New AI-generated quote is now active on your homepage!');
             } else {
+                activityTracker.trackActivity('ai_quote', 'Generated fallback hero quote', 'AI unavailable');
                 toast.info('Fallback Quote', 'Generated a new quote using fallback system.');
             }
             
@@ -1402,8 +1412,11 @@ async function updateAllQuotes() {
         if (response.ok) {
             const result = await response.json();
             
-            // Show detailed success notification
+            // Track the bulk update activity
             const aiText = result.usingAI ? 'AI-generated' : 'fallback';
+            activityTracker.trackActivity('ai_quote', `Bulk updated ${result.generated} quotes`, `${result.total} photos processed`);
+            
+            // Show detailed success notification
             toast.success('Bulk Update Complete', 
                 `Generated ${result.generated} ${aiText} quotes for ${result.total} photos! Your homepage now has maximum variety.`
             );
@@ -1619,57 +1632,69 @@ function updateOverviewCard(id, value, type) {
 
 async function loadRecentActivity() {
     try {
-        // Generate real activity from existing data
+        // Get tracked admin activities first (these are actual user actions)
+        const trackedActivities = activityTracker.getRecentActivities(10);
         const activities = [];
         
-        // Get recent photos (as upload activity)
-        try {
-            const photosResponse = await fetch('/admin/api/photos?limit=5', {
-                headers: { 'Authorization': 'Bearer ' + adminToken }
+        // Add tracked activities (user actions like AI refresh, etc.)
+        trackedActivities.forEach(activity => {
+            activities.push({
+                type: activity.type,
+                title: activity.title,
+                time: formatTimeAgo(activity.time),
+                icon: activityTracker.getActivityIcon(activity.type)
             });
-            if (photosResponse.ok) {
-                const photosData = await photosResponse.json();
-                const photos = photosData.photos || photosData;
-                photos.slice(0, 3).forEach(photo => {
-                    activities.push({
-                        type: 'upload',
-                        title: `Photo uploaded: ${photo.title || 'Untitled'}`,
-                        time: formatTimeAgo(photo.upload_date),
-                        icon: '📸'
-                    });
-                });
-            }
-        } catch (error) {
-            console.error('Error loading recent photos:', error);
-        }
-        
-        // Get recent quotes (as AI activity)
-        try {
-            const quotesResponse = await fetch('/admin/api/quotes?limit=3', {
-                headers: { 'Authorization': 'Bearer ' + adminToken }
-            });
-            if (quotesResponse.ok) {
-                const quotesData = await quotesResponse.json();
-                const quotes = quotesData.quotes || [];
-                quotes.slice(0, 2).forEach(quote => {
-                    activities.push({
-                        type: 'quote',
-                        title: `AI quote generated`,
-                        time: formatTimeAgo(quote.created_date),
-                        icon: '🤖'
-                    });
-                });
-            }
-        } catch (error) {
-            console.error('Error loading recent quotes:', error);
-        }
-        
-        // Sort activities by time (most recent first)
-        activities.sort((a, b) => {
-            const timeA = parseTimeAgo(a.time);
-            const timeB = parseTimeAgo(b.time);
-            return timeA - timeB;
         });
+        
+        // If we have fewer than 8 activities, supplement with data-based activities
+        if (activities.length < 8) {
+            const remainingSlots = 8 - activities.length;
+            
+            // Get recent photos (as upload activity) 
+            try {
+                const photosResponse = await fetch('/admin/api/photos?limit=5', {
+                    headers: { 'Authorization': 'Bearer ' + adminToken }
+                });
+                if (photosResponse.ok) {
+                    const photosData = await photosResponse.json();
+                    const photos = photosData.photos || photosData;
+                    photos.slice(0, Math.min(3, remainingSlots)).forEach(photo => {
+                        activities.push({
+                            type: 'upload',
+                            title: `Photo uploaded: ${photo.title || 'Untitled'}`,
+                            time: formatTimeAgo(photo.upload_date),
+                            icon: '📸'
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading recent photos:', error);
+            }
+            
+            // Get recent quotes (as AI activity) if still have slots
+            if (activities.length < 8) {
+                try {
+                    const quotesResponse = await fetch('/admin/api/quotes?limit=3', {
+                        headers: { 'Authorization': 'Bearer ' + adminToken }
+                    });
+                    if (quotesResponse.ok) {
+                        const quotesData = await quotesResponse.json();
+                        const quotes = quotesData.quotes || [];
+                        const quotesToShow = Math.min(2, 8 - activities.length);
+                        quotes.slice(0, quotesToShow).forEach(quote => {
+                            activities.push({
+                                type: 'quote',
+                                title: `AI quote generated`,
+                                time: formatTimeAgo(quote.created_date),
+                                icon: '🤖'
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading recent quotes:', error);
+                }
+            }
+        }
 
         renderRecentActivity(activities);
     } catch (error) {
@@ -3587,6 +3612,70 @@ class NotificationManager {
 
 // Initialize notification manager
 const notificationManager = new NotificationManager();
+
+// Activity tracking system
+class ActivityTracker {
+    constructor() {
+        this.activities = [];
+        this.loadActivities();
+    }
+    
+    trackActivity(type, title, details = '') {
+        const activity = {
+            id: Date.now() + Math.random(),
+            type: type, // 'ai_quote', 'upload', 'settings', 'theme', etc.
+            title: title,
+            details: details,
+            time: new Date()
+        };
+        
+        this.activities.unshift(activity);
+        this.saveActivities();
+        
+        return activity.id;
+    }
+    
+    getRecentActivities(limit = 10) {
+        return this.activities.slice(0, limit);
+    }
+    
+    saveActivities() {
+        try {
+            // Keep only last 100 activities
+            const toSave = this.activities.slice(0, 100);
+            localStorage.setItem('adminActivities', JSON.stringify(toSave));
+        } catch (error) {
+            console.error('Failed to save activities:', error);
+        }
+    }
+    
+    loadActivities() {
+        try {
+            const saved = localStorage.getItem('adminActivities');
+            if (saved) {
+                this.activities = JSON.parse(saved);
+            }
+        } catch (error) {
+            console.error('Failed to load activities:', error);
+            this.activities = [];
+        }
+    }
+    
+    getActivityIcon(type) {
+        const icons = {
+            ai_quote: '🤖',
+            upload: '📸',
+            settings: '⚙️',
+            theme: '🎨',
+            delete: '🗑️',
+            update: '📝'
+        };
+        return icons[type] || '📋';
+    }
+}
+
+// Initialize activity tracker
+const activityTracker = new ActivityTracker();
 
 // Global functions for HTML onclick handlers
 function toggleNotifications() {
