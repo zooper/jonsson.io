@@ -7,6 +7,12 @@ let selectedTheme = null;
 let currentActiveTheme = null; // Track the actually active theme from server
 let currentSection = 'photos';
 
+// Pagination state
+let currentPage = 1;
+let photosPerPage = 25;
+let totalPhotos = 0;
+let totalPages = 0;
+
 // Check if user is logged in
 if (!adminToken) {
     window.location.href = '/admin/index.html';
@@ -296,9 +302,10 @@ function logout() {
 }
 
 // Photo Management Functions
-async function loadPhotos() {
+async function loadPhotos(page = 1) {
     try {
-        const response = await fetch('/admin/api/photos', {
+        currentPage = page;
+        const response = await fetch(`/admin/api/photos?page=${page}&limit=${photosPerPage}`, {
             headers: {
                 'Authorization': 'Bearer ' + adminToken
             }
@@ -308,9 +315,14 @@ async function loadPhotos() {
             throw new Error('Failed to load photos');
         }
         
-        photos = await response.json();
+        const result = await response.json();
+        photos = result.photos;
+        totalPhotos = result.pagination.total;
+        totalPages = result.pagination.totalPages;
+        
         renderPhotos();
         updatePhotoCount();
+        renderPagination();
     } catch (error) {
         console.error('Failed to load photos:', error);
         document.getElementById('photosGrid').innerHTML = '<div class="loading">Failed to load photos</div>';
@@ -318,9 +330,59 @@ async function loadPhotos() {
 }
 
 function updatePhotoCount() {
-    if (photoCount) {
-        photoCount.textContent = photos.length;
+    const photoCountElement = document.getElementById('photoCount');
+    if (photoCountElement) {
+        photoCountElement.textContent = totalPhotos;
     }
+}
+
+function renderPagination() {
+    const paginationContainer = document.getElementById('photosPagination');
+    if (!paginationContainer || totalPages <= 1) {
+        if (paginationContainer) paginationContainer.innerHTML = '';
+        return;
+    }
+    
+    let paginationHTML = '<div class="pagination">';
+    
+    // Previous button
+    if (currentPage > 1) {
+        paginationHTML += `<button class="pagination-btn" onclick="loadPhotos(${currentPage - 1})">‹ Previous</button>`;
+    }
+    
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHTML += `<button class="pagination-btn" onclick="loadPhotos(1)">1</button>`;
+        if (startPage > 2) {
+            paginationHTML += `<span class="pagination-ellipsis">...</span>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const activeClass = i === currentPage ? 'active' : '';
+        paginationHTML += `<button class="pagination-btn ${activeClass}" onclick="loadPhotos(${i})">${i}</button>`;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHTML += `<span class="pagination-ellipsis">...</span>`;
+        }
+        paginationHTML += `<button class="pagination-btn" onclick="loadPhotos(${totalPages})">${totalPages}</button>`;
+    }
+    
+    // Next button
+    if (currentPage < totalPages) {
+        paginationHTML += `<button class="pagination-btn" onclick="loadPhotos(${currentPage + 1})">Next ›</button>`;
+    }
+    
+    // Page info
+    paginationHTML += `<div class="pagination-info">Page ${currentPage} of ${totalPages} (${totalPhotos} photos)</div>`;
+    
+    paginationHTML += '</div>';
+    paginationContainer.innerHTML = paginationHTML;
 }
 
 function renderPhotos() {

@@ -71,18 +71,47 @@ export class PhotoDatabase {
     }
 
     /**
-     * Get all photos with metadata
+     * Get all photos with metadata (legacy method for backward compatibility)
      */
     async listPhotos(limit = 100) {
+        const result = await this.listPhotosWithPagination(1, limit);
+        return result.photos;
+    }
+
+    /**
+     * Get photos with pagination support
+     */
+    async listPhotosWithPagination(page = 1, limit = 20) {
+        const offset = (page - 1) * limit;
+        
+        // Get total count
+        const countStmt = this.db.prepare(`SELECT COUNT(*) as total FROM photos`);
+        const countResult = await countStmt.first();
+        const total = countResult.total;
+        
+        // Get paginated photos
         const stmt = this.db.prepare(`
             SELECT * FROM photos 
             ORDER BY upload_date DESC 
-            LIMIT ?
+            LIMIT ? OFFSET ?
         `);
         
-        const result = await stmt.bind(limit).all();
+        const result = await stmt.bind(limit, offset).all();
+        const photos = result.results.map(row => this.formatPhotoFromRow(row));
         
-        return result.results.map(row => this.formatPhotoFromRow(row));
+        const totalPages = Math.ceil(total / limit);
+        
+        return {
+            photos,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1
+            }
+        };
     }
 
     /**

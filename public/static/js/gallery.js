@@ -13,6 +13,12 @@ class PhotoGallery {
         this.touchStartY = 0;
         this.touchThreshold = 50;
         
+        // Pagination state
+        this.currentPage = 1;
+        this.photosPerPage = 20;
+        this.totalPhotos = 0;
+        this.totalPages = 0;
+        
         this.init();
     }
     
@@ -33,15 +39,22 @@ class PhotoGallery {
         });
     }
     
-    async loadPhotos() {
+    async loadPhotos(page = 1) {
         const loadingGrid = document.querySelector('.loading-grid');
+        this.isLoading = true;
         
         try {
-            const response = await fetch('/api/photos');
+            const response = await fetch(`/api/photos?page=${page}&limit=${this.photosPerPage}`);
             if (!response.ok) throw new Error('Failed to load photos');
             
-            this.photos = await response.json();
+            const result = await response.json();
+            this.photos = result.photos;
+            this.currentPage = result.pagination.page;
+            this.totalPhotos = result.pagination.total;
+            this.totalPages = result.pagination.totalPages;
+            
             this.renderGallery();
+            this.renderPagination();
             
             if (loadingGrid) {
                 loadingGrid.style.opacity = '0';
@@ -51,6 +64,8 @@ class PhotoGallery {
         } catch (error) {
             console.error('Error loading photos:', error);
             this.showError('Failed to load photos. Please try again later.');
+        } finally {
+            this.isLoading = false;
         }
     }
     
@@ -475,8 +490,58 @@ class PhotoGallery {
     }
     
     updatePhotoCount() {
-        // Photo count element removed from UI
-        // This method kept for compatibility but does nothing
+        // Photo count element removed from UI in main design
+        // but we could add it back if needed
+        const countElement = document.querySelector('.photo-count');
+        if (countElement) {
+            countElement.textContent = this.totalPhotos;
+        }
+    }
+    
+    renderPagination() {
+        const paginationContainer = document.querySelector('.gallery-pagination');
+        if (!paginationContainer || this.totalPages <= 1) {
+            if (paginationContainer) paginationContainer.innerHTML = '';
+            return;
+        }
+        
+        let paginationHTML = '<div class="pagination">';
+        
+        // Previous button
+        if (this.currentPage > 1) {
+            paginationHTML += `<button class="pagination-btn" onclick="gallery.loadPhotos(${this.currentPage - 1})" ${this.isLoading ? 'disabled' : ''}>‹ Previous</button>`;
+        }
+        
+        // Page numbers
+        const startPage = Math.max(1, this.currentPage - 2);
+        const endPage = Math.min(this.totalPages, this.currentPage + 2);
+        
+        if (startPage > 1) {
+            paginationHTML += `<button class="pagination-btn" onclick="gallery.loadPhotos(1)" ${this.isLoading ? 'disabled' : ''}>1</button>`;
+            if (startPage > 2) {
+                paginationHTML += `<span class="pagination-ellipsis">...</span>`;
+            }
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const activeClass = i === this.currentPage ? 'active' : '';
+            paginationHTML += `<button class="pagination-btn ${activeClass}" onclick="gallery.loadPhotos(${i})" ${this.isLoading ? 'disabled' : ''}>${i}</button>`;
+        }
+        
+        if (endPage < this.totalPages) {
+            if (endPage < this.totalPages - 1) {
+                paginationHTML += `<span class="pagination-ellipsis">...</span>`;
+            }
+            paginationHTML += `<button class="pagination-btn" onclick="gallery.loadPhotos(${this.totalPages})" ${this.isLoading ? 'disabled' : ''}>${this.totalPages}</button>`;
+        }
+        
+        // Next button
+        if (this.currentPage < this.totalPages) {
+            paginationHTML += `<button class="pagination-btn" onclick="gallery.loadPhotos(${this.currentPage + 1})" ${this.isLoading ? 'disabled' : ''}>Next ›</button>`;
+        }
+        
+        paginationHTML += '</div>';
+        paginationContainer.innerHTML = paginationHTML;
     }
     
     toggleLightboxInfo() {

@@ -339,11 +339,19 @@ async function handleApiRequest(request, env, pathname) {
 
 async function handlePhotosRequest(storage, request, db) {
     try {
-        // Get photos from database with EXIF data
+        const url = new URL(request.url);
+        const page = parseInt(url.searchParams.get('page') || '1');
+        const limit = parseInt(url.searchParams.get('limit') || '20');
+        
+        // Validate parameters
+        const validPage = Math.max(1, page);
+        const validLimit = Math.max(1, Math.min(100, limit)); // Limit between 1-100
+        
+        // Get photos from database with pagination
         const photoDb = new PhotoDatabase(db);
-        const photos = await photoDb.listPhotos(50);
-
-        return new Response(JSON.stringify(photos), {
+        const result = await photoDb.listPhotosWithPagination(validPage, validLimit);
+        
+        return new Response(JSON.stringify(result), {
             headers: {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
@@ -564,10 +572,18 @@ async function handleAdminUpload(request, env) {
 
 async function handleAdminPhotos(request, env) {
     try {
-        const photoDb = new PhotoDatabase(env.DB);
-        const photos = await photoDb.listPhotos(100);
+        const url = new URL(request.url);
+        const page = parseInt(url.searchParams.get('page') || '1');
+        const limit = parseInt(url.searchParams.get('limit') || '25');
         
-        return new Response(JSON.stringify(photos), {
+        // Validate parameters  
+        const validPage = Math.max(1, page);
+        const validLimit = Math.max(1, Math.min(100, limit)); // Limit between 1-100
+        
+        const photoDb = new PhotoDatabase(env.DB);
+        const result = await photoDb.listPhotosWithPagination(validPage, validLimit);
+        
+        return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' }
         });
     } catch (error) {
