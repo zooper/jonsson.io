@@ -227,12 +227,67 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Load basic menu data before switching to initial section
+    loadMenuCounts();
+    
     // Load initial section (photos)
     switchSection('photos');
     
     // Initialize database management
     initializeDatabaseManagement();
 });
+
+// Load basic counts for menu items on page load
+async function loadMenuCounts() {
+    try {
+        // Load photo count
+        const photosResponse = await fetch('/admin/api/photos', {
+            headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
+        if (photosResponse.ok) {
+            const photosData = await photosResponse.json();
+            const photoCount = document.getElementById('photoCount');
+            if (photoCount && Array.isArray(photosData)) {
+                photoCount.textContent = photosData.length;
+            }
+        }
+        
+        // Load quotes count
+        const quotesResponse = await fetch('/admin/api/quotes', {
+            headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
+        if (quotesResponse.ok) {
+            const quotesData = await quotesResponse.json();
+            updateQuotesCount(quotesData.total || (quotesData.quotes ? quotesData.quotes.length : 0));
+        }
+        
+        // Load Cloudflare status
+        const cfResponse = await fetch('/admin/api/cloudflare-analytics?period=1', {
+            headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
+        const cfStatusBadge = document.getElementById('cfStatusBadge');
+        if (cfStatusBadge) {
+            if (cfResponse.ok) {
+                cfStatusBadge.textContent = '✓';
+                cfStatusBadge.style.color = '#10b981';
+            } else {
+                const errorData = await cfResponse.json();
+                if (cfResponse.status === 500 && errorData.error === 'Cloudflare credentials not configured') {
+                    cfStatusBadge.textContent = '⚙';
+                    cfStatusBadge.style.color = '#f59e0b';
+                } else {
+                    cfStatusBadge.textContent = '✗';
+                    cfStatusBadge.style.color = '#ef4444';
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error loading menu counts:', error);
+        // Don't show error toast for this background operation
+    }
+}
+
 
 // Logout function
 function logout() {
@@ -2457,7 +2512,765 @@ function initializeDatabaseManagement() {
             if (sectionName === 'settings') {
                 // Load database status with a small delay to ensure DOM is ready
                 setTimeout(() => loadDatabaseStatus(), 100);
+            } else if (sectionName === 'cloudflare') {
+                // Load Cloudflare analytics with a small delay to ensure DOM is ready
+                setTimeout(() => loadCloudflareAnalytics(), 100);
             }
         };
     }
 }
+
+// Cloudflare Analytics Functions
+async function loadCloudflareAnalytics(force = false) {
+    try {
+        const periodSelector = document.getElementById('cfPeriodSelector');
+        const period = periodSelector ? periodSelector.value : '30';
+        
+        // Show loading state
+        showCloudflareLoading();
+        
+        const response = await fetch(`/admin/api/cloudflare-analytics?period=${period}`, {
+            headers: {
+                'Authorization': `Bearer ${adminToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            
+            if (response.status === 500 && errorData.error === 'Cloudflare credentials not configured') {
+                showCloudflareConfigNotice();
+                return;
+            }
+            
+            throw new Error(errorData.message || 'Failed to load Cloudflare analytics');
+        }
+        
+        const data = await response.json();
+        displayCloudflareAnalytics(data);
+        
+        // Update status badge
+        const statusBadge = document.getElementById('cfStatusBadge');
+        if (statusBadge) {
+            statusBadge.textContent = '✓';
+            statusBadge.style.color = '#10b981';
+        }
+        
+    } catch (error) {
+        console.error('Error loading Cloudflare analytics:', error);
+        showCloudflareError(error.message);
+        
+        // Update status badge
+        const statusBadge = document.getElementById('cfStatusBadge');
+        if (statusBadge) {
+            statusBadge.textContent = '✗';
+            statusBadge.style.color = '#ef4444';
+        }
+    }
+}
+
+function showCloudflareLoading() {
+    // Hide config notice
+    const configStatus = document.getElementById('cfConfigStatus');
+    if (configStatus) configStatus.style.display = 'none';
+    
+    // Show loading for all metrics
+    const loadingElements = [
+        'cfTotalRequests', 'cfBandwidth', 'cfCacheHitRate', 'cfThreats',
+        'cfAvgResponseTime', 'cfStatusCodes', 'cfSecurityOverview', 
+        'cfGeographicData', 'cfComparisonData', 'cfTimelineChart'
+    ];
+    
+    loadingElements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.innerHTML = '<div class="loading">Loading...</div>';
+        }
+    });
+    
+    // Reset change indicators
+    const changeElements = [
+        'cfRequestsChange', 'cfBandwidthChange', 'cfCacheChange', 'cfThreatsChange'
+    ];
+    
+    changeElements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = '-';
+    });
+}
+
+function showCloudflareConfigNotice() {
+    const configStatus = document.getElementById('cfConfigStatus');
+    if (configStatus) {
+        configStatus.style.display = 'block';
+    }
+    
+    // Update status badge
+    const statusBadge = document.getElementById('cfStatusBadge');
+    if (statusBadge) {
+        statusBadge.textContent = '⚙';
+        statusBadge.style.color = '#f59e0b';
+    }
+}
+
+function showCloudflareError(message) {
+    const errorElements = [
+        'cfTotalRequests', 'cfBandwidth', 'cfCacheHitRate', 'cfThreats',
+        'cfAvgResponseTime', 'cfStatusCodes', 'cfSecurityOverview', 
+        'cfGeographicData', 'cfComparisonData', 'cfTimelineChart'
+    ];
+    
+    errorElements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.innerHTML = `<div class="error">Error: ${message}</div>`;
+        }
+    });
+}
+
+function displayCloudflareAnalytics(data) {
+    console.log('Cloudflare analytics data:', data);
+    const cf = data.cloudflare;
+    console.log('Cloudflare overview:', cf.overview);
+    
+    // Store data for drill-downs
+    currentAnalyticsData = data;
+    
+    // Update overview cards
+    updateElement('cfTotalRequests', formatNumber(cf.overview.totalRequests));
+    updateElement('cfBandwidth', cf.overview.bandwidth || '0 Bytes');
+    updateElement('cfCacheHitRate', `${cf.overview.cacheHitRate || 0}%`);
+    updateElement('cfThreats', formatNumber(cf.overview.threatsStopped));
+    
+    // Performance metrics
+    updateElement('cfAvgResponseTime', `${cf.performance.avgResponseTime}ms`);
+    displayStatusCodes(cf.performance.statusCodes);
+    
+    // Security data
+    displaySecurityOverview(cf.security);
+    
+    // Geographic data
+    displayGeographicData(cf.geographic);
+    
+    // Data comparison
+    displayComparisonData(data.comparison);
+    
+    // Timeline chart
+    displayTimelineChart(cf.timeline);
+}
+
+function displayStatusCodes(statusCodes) {
+    const container = document.getElementById('cfStatusCodes');
+    if (!container || !statusCodes) return;
+    
+    const total = statusCodes.reduce((sum, item) => sum + item.count, 0);
+    
+    container.innerHTML = statusCodes.map(item => {
+        const percentage = total > 0 ? Math.round((item.count / total) * 100) : 0;
+        const colorClass = getStatusCodeColor(item.status);
+        
+        return `
+            <div class="status-item">
+                <div class="status-code ${colorClass}">${item.status}</div>
+                <div class="status-count">${formatNumber(item.count)} (${percentage}%)</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function displaySecurityOverview(security) {
+    const container = document.getElementById('cfSecurityOverview');
+    if (!container || !security) return;
+    
+    if (security.total === 0) {
+        container.innerHTML = '<div class="security-ok">✅ No threats detected</div>';
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="security-total">
+            <span class="threat-count">${formatNumber(security.total)}</span>
+            <span class="threat-label">threats blocked</span>
+        </div>
+        <div class="security-breakdown">
+            ${security.actions.slice(0, 3).map(action => `
+                <div class="security-item">
+                    <span class="action-name">${action.action}</span>
+                    <span class="action-count">${formatNumber(action.count)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function displayGeographicData(geographic) {
+    const container = document.getElementById('cfGeographicData');
+    if (!container || !geographic) return;
+    
+    container.innerHTML = geographic.slice(0, 8).map(country => {
+        const flagHtml = getCountryFlag({ 
+            clientCountryName: country.country,
+            clientCountryCode: country.countryCode // if available
+        });
+        return `
+            <div class="geo-item">
+                <div class="country-header">
+                    <span class="country-flag">${flagHtml}</span>
+                    <span class="country-name">${country.country}</span>
+                </div>
+                <div class="country-stats">
+                    <span class="requests">${formatNumber(country.requests)} requests</span>
+                    <span class="pageviews">${formatNumber(country.pageViews)} views</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function displayComparisonData(comparison) {
+    const container = document.getElementById('cfComparisonData');
+    if (!container || !comparison) return;
+    
+    container.innerHTML = `
+        <div class="comparison-metric">
+            <div class="metric-row">
+                <span class="metric-label">Cloudflare Page Views</span>
+                <span class="metric-value">${formatNumber(comparison.cloudflarePageViews)}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Database Page Views</span>
+                <span class="metric-value">${formatNumber(comparison.databasePageViews)}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Tracking Accuracy</span>
+                <span class="metric-value">${comparison.accuracy}%</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Difference</span>
+                <span class="metric-value ${comparison.difference >= 0 ? 'positive' : 'negative'}">
+                    ${comparison.difference >= 0 ? '+' : ''}${formatNumber(comparison.difference)}
+                </span>
+            </div>
+        </div>
+    `;
+}
+
+function displayTimelineChart(timeline) {
+    const container = document.getElementById('cfTimelineChart');
+    if (!container || !timeline) return;
+    
+    // Simple text-based timeline for now
+    // In a real implementation, you'd use a charting library like Chart.js
+    container.innerHTML = `
+        <div class="timeline-simple">
+            ${timeline.slice(-7).map(day => `
+                <div class="timeline-day">
+                    <div class="day-date">${formatDate(day.date)}</div>
+                    <div class="day-metrics">
+                        <div class="metric-item">
+                            <span class="metric-label">Requests</span>
+                            <span class="metric-value">${formatNumber(day.requests)}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Views</span>
+                            <span class="metric-value">${formatNumber(day.pageViews)}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Cache Hit</span>
+                            <span class="metric-value">${day.cacheHitRate}%</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Threats</span>
+                            <span class="metric-value">${formatNumber(day.threats)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Helper functions
+function getStatusCodeColor(status) {
+    const code = parseInt(status);
+    if (code >= 200 && code < 300) return 'success';
+    if (code >= 300 && code < 400) return 'warning';
+    if (code >= 400 && code < 500) return 'error';
+    if (code >= 500) return 'critical';
+    return 'unknown';
+}
+
+function formatNumber(num) {
+    if (num === undefined || num === null || isNaN(num)) {
+        return '0';
+    }
+    
+    const numValue = Number(num);
+    if (numValue >= 1000000) return (numValue / 1000000).toFixed(1) + 'M';
+    if (numValue >= 1000) return (numValue / 1000).toFixed(1) + 'K';
+    return numValue.toString();
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function updateElement(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+}
+
+// Global variable to store current analytics data for drill-downs
+let currentAnalyticsData = null;
+
+// Time Period Filter Functions
+function setTimePeriod(days) {
+    // Update active filter button
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // Update dropdown
+    const selector = document.getElementById('cfPeriodSelector');
+    if (selector) {
+        selector.value = days;
+    }
+    
+    // Reload data
+    loadCloudflareAnalytics();
+}
+
+// Drill-Down Modal Functions
+function showRequestsBreakdown() {
+    if (!currentAnalyticsData) return;
+    
+    const title = 'Request Traffic Breakdown';
+    const content = generateRequestsBreakdownContent(currentAnalyticsData);
+    showDrillDownModal(title, content);
+}
+
+function showBandwidthBreakdown() {
+    if (!currentAnalyticsData) return;
+    
+    const title = 'Bandwidth Usage Breakdown';
+    const content = generateBandwidthBreakdownContent(currentAnalyticsData);
+    showDrillDownModal(title, content);
+}
+
+function showCacheBreakdown() {
+    if (!currentAnalyticsData) return;
+    
+    const title = 'Cache Performance Breakdown';
+    const content = generateCacheBreakdownContent(currentAnalyticsData);
+    showDrillDownModal(title, content);
+}
+
+function showSecurityBreakdown() {
+    if (!currentAnalyticsData) return;
+    
+    const title = 'Security Threats Breakdown';
+    const content = generateSecurityBreakdownContent(currentAnalyticsData);
+    showDrillDownModal(title, content);
+}
+
+function showDrillDownModal(title, content) {
+    const modal = document.getElementById('cfDrillDownModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
+    
+    modalTitle.textContent = title;
+    modalContent.innerHTML = content;
+    modal.style.display = 'flex';
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDrillDownModal() {
+    const modal = document.getElementById('cfDrillDownModal');
+    modal.style.display = 'none';
+    
+    // Restore body scroll
+    document.body.style.overflow = '';
+}
+
+function exportDrillDownData() {
+    if (!currentAnalyticsData) return;
+    
+    const data = JSON.stringify(currentAnalyticsData, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cloudflare-analytics-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Drill-Down Content Generators
+function generateRequestsBreakdownContent(data) {
+    const cf = data.cloudflare;
+    const timeline = cf.timeline || [];
+    
+    return `
+        <div class="drill-down-grid">
+            <div class="drill-down-card">
+                <h4>Request Summary</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Total Requests</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalRequests)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Unique Visitors</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalUniques)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Page Views</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalPageViews)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Requests per Visitor</span>
+                    <span class="drill-metric-value">${cf.overview.totalUniques > 0 ? Math.round(cf.overview.totalRequests / cf.overview.totalUniques) : 0}</span>
+                </div>
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Daily Trend (Last 7 Days)</h4>
+                ${timeline.slice(-7).map(day => `
+                    <div class="drill-metric">
+                        <span class="drill-metric-label">${formatDate(day.date)}</span>
+                        <span class="drill-metric-value">${formatNumber(day.requests)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Traffic Quality</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Human Traffic</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalRequests - cf.overview.threatsStopped)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Bot/Threat Traffic</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.threatsStopped)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Quality Score</span>
+                    <span class="drill-metric-value">${cf.overview.totalRequests > 0 ? Math.round(((cf.overview.totalRequests - cf.overview.threatsStopped) / cf.overview.totalRequests) * 100) : 0}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function generateBandwidthBreakdownContent(data) {
+    const cf = data.cloudflare;
+    const timeline = cf.timeline || [];
+    
+    return `
+        <div class="drill-down-grid">
+            <div class="drill-down-card">
+                <h4>Bandwidth Summary</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Total Bandwidth</span>
+                    <span class="drill-metric-value">${cf.overview.bandwidth}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Avg per Request</span>
+                    <span class="drill-metric-value">${cf.overview.totalRequests > 0 ? formatBytes(cf.overview.totalBytes / cf.overview.totalRequests) : '0 Bytes'}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Daily Average</span>
+                    <span class="drill-metric-value">${timeline.length > 0 ? formatBytes(cf.overview.totalBytes / timeline.length) : '0 Bytes'}</span>
+                </div>
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Daily Bandwidth (Last 7 Days)</h4>
+                ${timeline.slice(-7).map(day => `
+                    <div class="drill-metric">
+                        <span class="drill-metric-label">${formatDate(day.date)}</span>
+                        <span class="drill-metric-value">${formatBytes(day.bytes)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Top Countries by Bandwidth</h4>
+                ${cf.geographic.slice(0, 5).map(country => {
+                    const flagHtml = getCountryFlag({ 
+                        clientCountryName: country.country,
+                        clientCountryCode: country.countryCode 
+                    });
+                    return `
+                        <div class="drill-metric">
+                            <span class="drill-metric-label">
+                                <span class="country-flag-inline">${flagHtml}</span>
+                                ${country.country}
+                            </span>
+                            <span class="drill-metric-value">${formatBytes(country.bytes || 0)}</span>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function generateCacheBreakdownContent(data) {
+    const cf = data.cloudflare;
+    const timeline = cf.timeline || [];
+    
+    return `
+        <div class="drill-down-grid">
+            <div class="drill-down-card">
+                <h4>Cache Performance</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Overall Hit Rate</span>
+                    <span class="drill-metric-value">${cf.overview.cacheHitRate}%</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Cached Requests</span>
+                    <span class="drill-metric-value">${formatNumber(Math.round(cf.overview.totalRequests * cf.overview.cacheHitRate / 100))}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Origin Requests</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalRequests - Math.round(cf.overview.totalRequests * cf.overview.cacheHitRate / 100))}</span>
+                </div>
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Daily Cache Performance</h4>
+                ${timeline.slice(-7).map(day => `
+                    <div class="drill-metric">
+                        <span class="drill-metric-label">${formatDate(day.date)}</span>
+                        <span class="drill-metric-value">${day.cacheHitRate}%</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Bandwidth Savings</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Cached Bandwidth</span>
+                    <span class="drill-metric-value">${formatBytes(Math.round(cf.overview.totalBytes * cf.overview.cacheHitRate / 100))}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Origin Bandwidth</span>
+                    <span class="drill-metric-value">${formatBytes(cf.overview.totalBytes - Math.round(cf.overview.totalBytes * cf.overview.cacheHitRate / 100))}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Bandwidth Saved</span>
+                    <span class="drill-metric-value">${formatBytes(Math.round(cf.overview.totalBytes * cf.overview.cacheHitRate / 100))}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function generateSecurityBreakdownContent(data) {
+    const cf = data.cloudflare;
+    const timeline = cf.timeline || [];
+    
+    return `
+        <div class="drill-down-grid">
+            <div class="drill-down-card">
+                <h4>Threat Summary</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Total Threats Blocked</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.threatsStopped)}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Threat Rate</span>
+                    <span class="drill-metric-value">${cf.overview.totalRequests > 0 ? ((cf.overview.threatsStopped / cf.overview.totalRequests) * 100).toFixed(2) : 0}%</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Clean Traffic</span>
+                    <span class="drill-metric-value">${formatNumber(cf.overview.totalRequests - cf.overview.threatsStopped)}</span>
+                </div>
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Daily Threats (Last 7 Days)</h4>
+                ${timeline.slice(-7).map(day => `
+                    <div class="drill-metric">
+                        <span class="drill-metric-label">${formatDate(day.date)}</span>
+                        <span class="drill-metric-value">${formatNumber(day.threats)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="drill-down-card">
+                <h4>Protection Stats</h4>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Average Daily Threats</span>
+                    <span class="drill-metric-value">${timeline.length > 0 ? Math.round(cf.overview.threatsStopped / timeline.length) : 0}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Peak Threats (Single Day)</span>
+                    <span class="drill-metric-value">${timeline.length > 0 ? Math.max(...timeline.map(d => d.threats)) : 0}</span>
+                </div>
+                <div class="drill-metric">
+                    <span class="drill-metric-label">Protection Effectiveness</span>
+                    <span class="drill-metric-value">${cf.overview.threatsStopped > 0 ? '🛡️ Active' : '✅ Clean'}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function getCountryFlag(countryData) {
+    // Handle different data formats from Cloudflare vs visitor analytics
+    let countryCode = null;
+    let countryName = null;
+    
+    if (countryData.clientCountryCode) {
+        countryCode = countryData.clientCountryCode;
+        countryName = countryData.clientCountryName;
+    } else if (countryData.country_code) {
+        countryCode = countryData.country_code;
+        countryName = countryData.country_name;
+    } else if (countryData.countryCode) {
+        countryCode = countryData.countryCode;
+        countryName = countryData.country;
+    } else {
+        // Try to get from country name
+        countryName = countryData.clientCountryName || countryData.country_name || countryData.country;
+        countryCode = getCountryCodeFromName(countryName);
+    }
+    
+    if (!countryCode) {
+        return `<span class="country-flag-fallback">🌍</span>`;
+    }
+    
+    // Try Unicode flag emoji first (more reliable)
+    const unicodeFlag = getUnicodeFlagEmoji(countryCode);
+    if (unicodeFlag) {
+        return `<span class="country-flag-emoji">${unicodeFlag}</span>`;
+    }
+    
+    // Fallback to external service
+    const flagUrl = `https://flagcdn.com/16x12/${countryCode.toLowerCase()}.png`;
+    
+    return `<img src="${flagUrl}" 
+                 alt="${countryName || countryCode}" 
+                 class="country-flag-img"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span class="country-flag-fallback" style="display:none;">🌍</span>`;
+}
+
+function getUnicodeFlagEmoji(countryCode) {
+    if (!countryCode || countryCode.length !== 2) return null;
+    
+    // Convert country code to Unicode flag emoji
+    // Flag emojis are made by combining Regional Indicator Symbol letters
+    const codePoints = countryCode.toUpperCase().split('').map(char => 
+        0x1F1E6 + (char.charCodeAt(0) - 'A'.charCodeAt(0))
+    );
+    
+    try {
+        return String.fromCodePoint(...codePoints);
+    } catch (e) {
+        return null;
+    }
+}
+
+function getCountryCodeFromName(countryName) {
+    if (!countryName) return null;
+    
+    // Common country name to ISO code mappings
+    const countryMap = {
+        'United States': 'us',
+        'United Kingdom': 'gb',
+        'Ireland': 'ie', 
+        'France': 'fr',
+        'Germany': 'de',
+        'Italy': 'it',
+        'Spain': 'es',
+        'Netherlands': 'nl',
+        'Belgium': 'be',
+        'Portugal': 'pt',
+        'Sweden': 'se',
+        'Norway': 'no',
+        'Denmark': 'dk',
+        'Finland': 'fi',
+        'Switzerland': 'ch',
+        'Austria': 'at',
+        'Poland': 'pl',
+        'Russia': 'ru',
+        'Ukraine': 'ua',
+        'Canada': 'ca',
+        'Mexico': 'mx',
+        'Brazil': 'br',
+        'Argentina': 'ar',
+        'Australia': 'au',
+        'New Zealand': 'nz',
+        'Japan': 'jp',
+        'China': 'cn',
+        'South Korea': 'kr',
+        'India': 'in',
+        'Singapore': 'sg',
+        'Thailand': 'th',
+        'Malaysia': 'my',
+        'Philippines': 'ph',
+        'Indonesia': 'id',
+        'Vietnam': 'vn',
+        'Turkey': 'tr',
+        'Israel': 'il',
+        'South Africa': 'za',
+        'Egypt': 'eg',
+        'Nigeria': 'ng',
+        'Kenya': 'ke',
+        'Czech Republic': 'cz',
+        'Hungary': 'hu',
+        'Romania': 'ro',
+        'Bulgaria': 'bg',
+        'Croatia': 'hr',
+        'Slovenia': 'si',
+        'Slovakia': 'sk',
+        'Estonia': 'ee',
+        'Latvia': 'lv',
+        'Lithuania': 'lt'
+    };
+    
+    // First try exact match
+    if (countryMap[countryName]) {
+        return countryMap[countryName];
+    }
+    
+    // Try case-insensitive match
+    const lowerName = countryName.toLowerCase();
+    for (const [name, code] of Object.entries(countryMap)) {
+        if (name.toLowerCase() === lowerName) {
+            return code;
+        }
+    }
+    
+    // If it's already a 2-letter code, return it
+    if (countryName.length === 2) {
+        return countryName.toLowerCase();
+    }
+    
+    return null;
+}
+
+// Make functions globally available
+window.loadCloudflareAnalytics = loadCloudflareAnalytics;
+window.setTimePeriod = setTimePeriod;
+window.showRequestsBreakdown = showRequestsBreakdown;
+window.showBandwidthBreakdown = showBandwidthBreakdown;
+window.showCacheBreakdown = showCacheBreakdown;
+window.showSecurityBreakdown = showSecurityBreakdown;
+window.closeDrillDownModal = closeDrillDownModal;
+window.exportDrillDownData = exportDrillDownData;
