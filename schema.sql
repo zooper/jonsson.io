@@ -1,5 +1,5 @@
 -- Database schema for jonsson.io photography website
--- Current version: 3
+-- Current version: 4
 
 -- Database version tracking
 CREATE TABLE IF NOT EXISTS database_version (
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS database_version (
 
 -- Insert current version if not exists
 INSERT OR IGNORE INTO database_version (id, version, description) 
-VALUES (1, 3, 'Base schema with visitor analytics and response code tracking');
+VALUES (1, 4, 'Add magic link authentication system');
 
 -- Photos table for storing photo metadata and EXIF data
 CREATE TABLE IF NOT EXISTS photos (
@@ -121,3 +121,19 @@ CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id);
 CREATE INDEX IF NOT EXISTS idx_page_views_url ON page_views(page_url);
 CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at ON page_views(viewed_at);
 CREATE INDEX IF NOT EXISTS idx_page_views_response_code ON page_views(response_code);
+
+-- Magic link tokens for authentication
+CREATE TABLE IF NOT EXISTS magic_links (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ip_address TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
+CREATE INDEX IF NOT EXISTS idx_magic_links_email ON magic_links(email);
+CREATE INDEX IF NOT EXISTS idx_magic_links_expires ON magic_links(expires_at);

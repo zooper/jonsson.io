@@ -65,19 +65,27 @@ export default {
 async function handleAdminRequest(request, env, pathname) {
     console.log('Admin request:', request.method, pathname);
     
-    // Simple authentication check for API routes
-    if (pathname.startsWith('/admin/api/')) {
+    // Authentication check for API routes (skip magic link endpoints)
+    if (pathname.startsWith('/admin/api/') && 
+        !pathname.includes('/request-magic-link') && 
+        !pathname.includes('/verify-magic-link')) {
+        
         const authHeader = request.headers.get('Authorization');
-        const adminPassword = env.ADMIN_PASSWORD;
         
-        console.log('Auth check - Header:', authHeader ? 'Present' : 'Missing', 'Expected:', `Bearer ${adminPassword}`);
-        
-        if (!adminPassword || !authHeader || authHeader !== `Bearer ${adminPassword}`) {
-            console.log('Authentication failed');
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('Authentication failed: No valid authorization header');
             return new Response('Unauthorized', { status: 401 });
         }
         
-        console.log('Authentication passed');
+        const token = authHeader.substring(7); // Remove 'Bearer '
+        
+        // JWT validation only
+        const isValidJWT = await validateJWT(token, env);
+        if (!isValidJWT) {
+            console.log('JWT authentication failed');
+            return new Response('Unauthorized', { status: 401 });
+        }
+        console.log('JWT authentication passed');
     }
     
     // API routes
@@ -139,9 +147,16 @@ async function handleAdminRequest(request, env, pathname) {
             }
             break;
             
-        case '/admin/api/auth':
+            
+        case '/admin/api/request-magic-link':
             if (request.method === 'POST') {
-                return handleAdminAuth(request, env);
+                return handleRequestMagicLink(request, env);
+            }
+            break;
+            
+        case '/admin/api/verify-magic-link':
+            if (request.method === 'POST') {
+                return handleVerifyMagicLink(request, env);
             }
             break;
             
@@ -244,9 +259,16 @@ async function handleApiRequest(request, env, pathname) {
     
     if (protectedEndpoints.includes(pathname)) {
         const authHeader = request.headers.get('Authorization');
-        const adminPassword = env.ADMIN_PASSWORD;
         
-        if (!adminPassword || !authHeader || authHeader !== `Bearer ${adminPassword}`) {
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return new Response('Unauthorized', { status: 401 });
+        }
+        
+        const token = authHeader.substring(7);
+        
+        // JWT validation only
+        const isValidJWT = await validateJWT(token, env);
+        if (!isValidJWT) {
             return new Response('Unauthorized', { status: 401 });
         }
     }
@@ -977,31 +999,366 @@ async function handleAdminMigrate(request, env) {
     }
 }
 
-async function handleAdminAuth(request, env) {
+
+// Magic Link Authentication Functions
+async function handleRequestMagicLink(request, env) {
     try {
-        const { password } = await request.json();
-        const adminPassword = env.ADMIN_PASSWORD;
+        const { email } = await request.json();
         
-        if (adminPassword && password === adminPassword) {
+        if (!email) {
             return new Response(JSON.stringify({ 
-                success: true,
-                message: 'Authentication successful'
+                error: 'Email is required' 
             }), {
+                status: 400,
                 headers: { 'Content-Type': 'application/json' }
             });
-        } else {
+        }
+        
+        // Verify this is the admin email
+        const adminEmail = env.ADMIN_EMAIL;
+        if (!adminEmail || email.toLowerCase() !== adminEmail.toLowerCase()) {
             return new Response(JSON.stringify({ 
-                error: 'Invalid password'
+                error: 'Invalid email address' 
             }), {
                 status: 401,
                 headers: { 'Content-Type': 'application/json' }
             });
         }
+        
+        // Generate secure token
+        const token = crypto.randomUUID() + '-' + crypto.randomUUID();
+        const tokenId = crypto.randomUUID();
+        
+        // Set expiration to 10 minutes from now
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        
+        // Get request info
+        const clientIP = request.headers.get('CF-Connecting-IP') || 
+                        request.headers.get('X-Forwarded-For') || 
+                        'unknown';
+        const userAgent = request.headers.get('User-Agent') || '';
+        
+        // Clean up expired tokens first
+        await env.DB.prepare(`
+            DELETE FROM magic_links 
+            WHERE expires_at < CURRENT_TIMESTAMP
+        `).run();
+        
+        // Store magic link token
+        await env.DB.prepare(`
+            INSERT INTO magic_links (id, email, token, expires_at, ip_address, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(tokenId, email, token, expiresAt, clientIP, userAgent).run();
+        
+        // Send email with magic link
+        const magicLink = `${new URL(request.url).origin}/admin/?token=${token}`;
+        await sendMagicLinkEmail(email, magicLink, env);
+        
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'Magic link sent to your email address'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        console.error('Magic link request error:', error);
+        return new Response(JSON.stringify({ 
+            error: 'Failed to send magic link' 
+        }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });
+    }
+}
+
+async function handleVerifyMagicLink(request, env) {
+    try {
+        const { token } = await request.json();
+        
+        if (!token) {
+            return new Response(JSON.stringify({ 
+                error: 'Token is required' 
+            }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Find and verify token
+        const magicLink = await env.DB.prepare(`
+            SELECT id, email, expires_at, used_at 
+            FROM magic_links 
+            WHERE token = ?
+        `).bind(token).first();
+        
+        if (!magicLink) {
+            return new Response(JSON.stringify({ 
+                error: 'Invalid or expired magic link' 
+            }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Check if already used
+        if (magicLink.used_at) {
+            return new Response(JSON.stringify({ 
+                error: 'Magic link has already been used' 
+            }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Check if expired
+        const now = new Date();
+        const expiresAt = new Date(magicLink.expires_at);
+        if (now > expiresAt) {
+            return new Response(JSON.stringify({ 
+                error: 'Magic link has expired' 
+            }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Mark as used
+        await env.DB.prepare(`
+            UPDATE magic_links 
+            SET used_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        `).bind(magicLink.id).run();
+        
+        // Generate JWT session token
+        const sessionToken = await generateJWT(magicLink.email, env);
+        
+        return new Response(JSON.stringify({
+            success: true,
+            token: sessionToken,
+            message: 'Authentication successful'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+    } catch (error) {
+        console.error('Magic link verification error:', error);
+        return new Response(JSON.stringify({ 
+            error: 'Failed to verify magic link' 
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function sendMagicLinkEmail(email, magicLink, env) {
+    const emailData = {
+        from: 'noreply@jonsson.io',
+        to: [email],
+        subject: 'Admin Login - Jonsson.io Photography',
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { text-align: center; margin-bottom: 40px; }
+                    .logo { font-size: 24px; font-weight: bold; color: #6366f1; }
+                    .content { background: #f8fafc; padding: 30px; border-radius: 12px; margin: 20px 0; }
+                    .button { display: inline-block; background: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: 500; }
+                    .footer { text-align: center; margin-top: 40px; font-size: 14px; color: #666; }
+                    .warning { background: #fef3cd; border: 1px solid #fbbf24; color: #92400e; padding: 15px; border-radius: 8px; margin: 20px 0; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <div class="logo">jonsson.io</div>
+                        <h1>Admin Login Request</h1>
+                    </div>
+                    
+                    <div class="content">
+                        <p>Hello,</p>
+                        <p>You requested access to the admin dashboard for your photography website. Click the button below to log in:</p>
+                        
+                        <p style="text-align: center; margin: 30px 0;">
+                            <a href="${magicLink}" class="button">Access Admin Dashboard</a>
+                        </p>
+                        
+                        <div class="warning">
+                            <strong>Security Notice:</strong>
+                            <ul>
+                                <li>This link expires in 10 minutes</li>
+                                <li>It can only be used once</li>
+                                <li>If you didn't request this, please ignore this email</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="footer">
+                        <p>This is an automated message from your photography website admin system.</p>
+                        <p>The link will expire at ${new Date(Date.now() + 10 * 60 * 1000).toLocaleString()}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `,
+        text: `
+Admin Login Request - Jonsson.io Photography
+
+You requested access to the admin dashboard. Click this link to log in:
+${magicLink}
+
+Security Notice:
+- This link expires in 10 minutes
+- It can only be used once  
+- If you didn't request this, please ignore this email
+
+Link expires at: ${new Date(Date.now() + 10 * 60 * 1000).toLocaleString()}
+        `
+    };
+    
+    const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
+    });
+    
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to send email: ${error}`);
+    }
+    
+    return response.json();
+}
+
+async function generateJWT(email, env) {
+    const header = {
+        alg: 'HS256',
+        typ: 'JWT'
+    };
+    
+    const payload = {
+        email: email,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 hours
+        iss: 'jonsson.io-admin'
+    };
+    
+    // Base64url encoding (URL-safe base64 without padding)
+    const encodedHeader = base64urlEncode(JSON.stringify(header));
+    const encodedPayload = base64urlEncode(JSON.stringify(payload));
+    
+    const secret = env.JWT_SECRET;
+    const key = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(secret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign(
+        'HMAC',
+        key,
+        new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
+    );
+    
+    const encodedSignature = base64urlEncode(String.fromCharCode(...new Uint8Array(signature)));
+    
+    return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
+}
+
+function base64urlEncode(str) {
+    return btoa(str)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+}
+
+function base64urlDecode(str) {
+    // Convert back to standard base64
+    str = str.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding
+    const pad = str.length % 4;
+    if (pad) {
+        str += '='.repeat(4 - pad);
+    }
+    return atob(str);
+}
+
+async function validateJWT(token, env) {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return false;
+        }
+        
+        const [encodedHeader, encodedPayload, encodedSignature] = parts;
+        
+        // Verify signature
+        const secret = env.JWT_SECRET;
+        if (!secret) {
+            throw new Error('JWT_SECRET not configured');
+        }
+        
+        const key = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(secret),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['verify']
+        );
+        
+        // Decode signature using base64url decoding
+        const signature = new Uint8Array(
+            base64urlDecode(encodedSignature)
+                .split('')
+                .map(c => c.charCodeAt(0))
+        );
+        
+        const isValidSignature = await crypto.subtle.verify(
+            'HMAC',
+            key,
+            signature,
+            new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
+        );
+        
+        if (!isValidSignature) {
+            return false;
+        }
+        
+        // Parse and validate payload using base64url decoding
+        const payload = JSON.parse(base64urlDecode(encodedPayload));
+        
+        // Check expiration
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp < now) {
+            return false;
+        }
+        
+        // Check issuer
+        if (payload.iss !== 'jonsson.io-admin') {
+            return false;
+        }
+        
+        // Check email is admin email
+        const adminEmail = env.ADMIN_EMAIL;
+        if (!adminEmail || payload.email !== adminEmail) {
+            return false;
+        }
+        
+        return true;
+        
+    } catch (error) {
+        console.error('JWT validation error:', error);
+        return false;
     }
 }
 
@@ -2125,22 +2482,21 @@ async function handleUpdateAllQuotes(request, env) {
 
 // Visitor Analytics Functions
 
-function isAdminRequest(request, env) {
-    // Check if request has admin authorization header
+async function isAdminRequest(request, env) {
+    // Check if request has valid JWT token
     const authHeader = request.headers.get('Authorization');
-    const adminPassword = env.ADMIN_PASSWORD;
     
-    if (adminPassword && authHeader && authHeader === `Bearer ${adminPassword}`) {
-        return true;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return false;
     }
     
-    // Check for admin session cookie or other admin indicators
-    const cookies = request.headers.get('Cookie') || '';
-    if (adminPassword && cookies.includes('adminToken=' + adminPassword)) {
-        return true;
-    }
+    const token = authHeader.substring(7);
     
-    return false;
+    try {
+        return await validateJWT(token, env);
+    } catch (error) {
+        return false;
+    }
 }
 
 async function trackVisitor(request, env, responseCode = 200, responseTime = 0) {
@@ -2164,7 +2520,7 @@ async function trackVisitor(request, env, responseCode = 200, responseTime = 0) 
         }
         
         // Skip tracking if request is from admin user
-        if (isAdminRequest(request, env)) {
+        if (await isAdminRequest(request, env)) {
             return;
         }
 
@@ -2674,7 +3030,7 @@ async function handleGetDatabaseVersion(request, env) {
         `).first();
         
         // Check if any schema changes are needed
-        const targetVersion = 3; // Current target version from schema.sql
+        const targetVersion = 4; // Current target version from schema.sql
         const needsUpgrade = !currentVersion || currentVersion.version < targetVersion;
         
         // Get migration history
@@ -2824,6 +3180,57 @@ async function handleDatabaseUpgrade(request, env) {
                 console.error('Migration error:', migrationError);
                 return new Response(JSON.stringify({ 
                     error: `Migration failed: ${migrationError.message}`,
+                    completedMigrations: migrations
+                }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+        }
+        
+        // Migration from version 3 to 4 (magic links)
+        if (currentVersion < 4 && targetVersion >= 4) {
+            try {
+                // Create magic_links table
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS magic_links (
+                        id TEXT PRIMARY KEY,
+                        email TEXT NOT NULL,
+                        token TEXT NOT NULL UNIQUE,
+                        expires_at DATETIME NOT NULL,
+                        used_at DATETIME,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        ip_address TEXT,
+                        user_agent TEXT
+                    )
+                `).run();
+                migrations.push('Created magic_links table');
+                
+                // Create indexes for magic links
+                const magicLinkIndexes = [
+                    'CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token)',
+                    'CREATE INDEX IF NOT EXISTS idx_magic_links_email ON magic_links(email)',
+                    'CREATE INDEX IF NOT EXISTS idx_magic_links_expires ON magic_links(expires_at)'
+                ];
+                
+                for (const indexSQL of magicLinkIndexes) {
+                    await env.DB.prepare(indexSQL).run();
+                }
+                migrations.push('Created magic_links indexes');
+                
+                // Update to version 4
+                await env.DB.prepare(`
+                    INSERT OR REPLACE INTO database_version (id, version, description, applied_at)
+                    VALUES (1, 4, 'Add magic link authentication system', CURRENT_TIMESTAMP)
+                `).run();
+                
+                migratedToVersion = 4;
+                migrations.push('Updated database to version 4');
+                
+            } catch (migrationError) {
+                console.error('Migration to version 4 error:', migrationError);
+                return new Response(JSON.stringify({ 
+                    error: `Migration to version 4 failed: ${migrationError.message}`,
                     completedMigrations: migrations
                 }), {
                     status: 500,
