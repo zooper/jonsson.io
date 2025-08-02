@@ -27,6 +27,9 @@ ENVIRONMENT = "development"
 # B2_APPLICATION_KEY_ID = "your-key-id"
 # B2_APPLICATION_KEY = "your-application-key"
 # B2_BUCKET_ID = "your-bucket-id"
+# Cloudflare Analytics credentials (set via wrangler secret for production)
+# CLOUDFLARE_ZONE_ID = "your-zone-id"
+# CLOUDFLARE_API_TOKEN = "your-api-token"
 # B2_BUCKET_NAME = "your-bucket-name"
 
 [env.production.vars]

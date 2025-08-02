@@ -268,6 +268,12 @@ async function handleAdminRequest(request, env, pathname) {
                 return handleDatabaseUpgrade(request, env);
             }
             break;
+            
+        case '/admin/api/cloudflare-analytics':
+            if (request.method === 'GET') {
+                return handleCloudflareAnalytics(request, env);
+            }
+            break;
     }
     
     // Serve static admin files
@@ -3283,4 +3289,347 @@ async function handleDatabaseUpgrade(request, env) {
             headers: { 'Content-Type': 'application/json' }
         });
     }
+}
+
+// Cloudflare Analytics Integration Functions
+async function handleCloudflareAnalytics(request, env) {
+    try {
+        const url = new URL(request.url);
+        const period = url.searchParams.get('period') || '30'; // days
+        const zoneId = env.CLOUDFLARE_ZONE_ID;
+        const apiToken = env.CLOUDFLARE_API_TOKEN;
+        
+        if (!zoneId || !apiToken) {
+            return new Response(JSON.stringify({ 
+                error: 'Cloudflare credentials not configured',
+                message: 'Please set CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN environment variables'
+            }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Calculate date range
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(period));
+        
+        const since = startDate.toISOString();
+        const until = endDate.toISOString();
+        
+        // Simplified GraphQL query to test available fields
+        const query = `
+        query {
+            viewer {
+                zones(filter: {zoneTag: "${zoneId}"}) {
+                    # Basic HTTP Requests Timeline
+                    httpRequests1dGroups(
+                        limit: 30,
+                        filter: {
+                            date_geq: "${since.split('T')[0]}"
+                            date_leq: "${until.split('T')[0]}"
+                        }
+                        orderBy: [date_ASC]
+                    ) {
+                        dimensions {
+                            date
+                        }
+                        sum {
+                            browserMap {
+                                pageViews
+                                uaBrowserFamily
+                            }
+                            bytes
+                            cachedBytes
+                            cachedRequests
+                            countryMap {
+                                bytes
+                                requests
+                                threats
+                                clientCountryName
+                            }
+                            encryptedBytes
+                            encryptedRequests
+                            pageViews
+                            requests
+                            responseStatusMap {
+                                edgeResponseStatus
+                                requests
+                            }
+                            threats
+                        }
+                        uniq {
+                            uniques
+                        }
+                    }
+                }
+            }
+        }`;
+        
+        // Call Cloudflare GraphQL API
+        const cfResponse = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ query })
+        });
+        
+        if (!cfResponse.ok) {
+            const errorText = await cfResponse.text();
+            console.error('Cloudflare API error:', cfResponse.status, errorText);
+            return new Response(JSON.stringify({ 
+                error: 'Failed to fetch Cloudflare analytics',
+                details: errorText
+            }), {
+                status: cfResponse.status,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        const cfData = await cfResponse.json();
+        
+        if (cfData.errors) {
+            console.error('GraphQL errors:', cfData.errors);
+            return new Response(JSON.stringify({ 
+                error: 'GraphQL query failed',
+                details: cfData.errors
+            }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Process and format the data
+        const zoneData = cfData.data?.viewer?.zones?.[0];
+        if (!zoneData) {
+            return new Response(JSON.stringify({ 
+                error: 'No zone data found',
+                message: 'Check your CLOUDFLARE_ZONE_ID'
+            }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        
+        // Combine your database analytics with Cloudflare data
+        const [dbAnalytics] = await Promise.all([
+            getVisitorAnalyticsFromDB(env, period)
+        ]);
+        
+        // Format response combining both data sources
+        const analytics = {
+            period: parseInt(period),
+            cloudflare: {
+                overview: calculateCloudflareOverview(zoneData.httpRequests1dGroups),
+                timeline: formatTimelineData(zoneData.httpRequests1dGroups),
+                geographic: formatGeographicData(zoneData.httpRequests1dGroups),
+                security: formatSecurityData(zoneData.httpRequests1dGroups),
+                performance: formatPerformanceData(zoneData.httpRequests1dGroups)
+            },
+            database: dbAnalytics,
+            comparison: compareDataSources(zoneData.httpRequests1dGroups, dbAnalytics)
+        };
+        
+        return new Response(JSON.stringify(analytics), {
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error fetching Cloudflare analytics:', error);
+        return new Response(JSON.stringify({ 
+            error: error.message,
+            message: 'Failed to fetch analytics data'
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function getVisitorAnalyticsFromDB(env, period) {
+    try {
+        // Get basic overview from your existing database
+        const overview = await env.DB.prepare(`
+            SELECT 
+                COUNT(DISTINCT id) as unique_visitors,
+                SUM(page_views) as total_page_views,
+                AVG(CAST((julianday(session_end) - julianday(session_start)) * 24 * 60 * 60 AS INTEGER)) as avg_duration_seconds
+            FROM visitor_sessions 
+            WHERE session_start > datetime('now', '-${period} days')
+        `).first();
+        
+        return {
+            overview: overview || { unique_visitors: 0, total_page_views: 0, avg_duration_seconds: 0 }
+        };
+    } catch (error) {
+        console.error('Error getting DB analytics:', error);
+        return { overview: { unique_visitors: 0, total_page_views: 0, avg_duration_seconds: 0 } };
+    }
+}
+
+function calculateCloudflareOverview(timelineData) {
+    console.log('calculateCloudflareOverview input:', timelineData);
+    
+    if (!timelineData || timelineData.length === 0) {
+        return {
+            totalRequests: 0,
+            totalBytes: 0,
+            totalPageViews: 0,
+            totalUniques: 0,
+            cacheHitRate: 0,
+            threatsStopped: 0,
+            bandwidth: '0 Bytes'
+        };
+    }
+    
+    const totals = timelineData.reduce((acc, day) => {
+        console.log('Processing day:', day);
+        acc.requests += day.sum.requests || 0;
+        acc.bytes += day.sum.bytes || 0;
+        acc.pageViews += day.sum.pageViews || 0;
+        acc.cachedRequests += day.sum.cachedRequests || 0;
+        acc.threats += day.sum.threats || 0;
+        acc.uniques += (day.uniq && day.uniq.uniques) || 0;
+        return acc;
+    }, {
+        requests: 0,
+        bytes: 0,
+        pageViews: 0,
+        cachedRequests: 0,
+        threats: 0,
+        uniques: 0
+    });
+    
+    console.log('Calculated totals:', totals);
+    
+    const cacheHitRate = totals.requests > 0 ? (totals.cachedRequests / totals.requests * 100) : 0;
+    
+    const result = {
+        totalRequests: totals.requests,
+        totalBytes: totals.bytes,
+        totalPageViews: totals.pageViews,
+        totalUniques: totals.uniques,
+        cacheHitRate: Math.round(cacheHitRate * 100) / 100,
+        threatsStopped: totals.threats,
+        bandwidth: formatBytes(totals.bytes)
+    };
+    
+    console.log('Overview result:', result);
+    return result;
+}
+
+function formatTimelineData(timelineData) {
+    if (!timelineData) return [];
+    
+    return timelineData.map(day => ({
+        date: day.dimensions.date,
+        requests: day.sum.requests || 0,
+        pageViews: day.sum.pageViews || 0,
+        bytes: day.sum.bytes || 0,
+        uniques: day.uniq.uniques || 0,
+        threats: day.sum.threats || 0,
+        cacheHitRate: day.sum.requests > 0 ? 
+            Math.round((day.sum.cachedRequests / day.sum.requests) * 100) : 0
+    }));
+}
+
+function formatGeographicData(timelineData) {
+    if (!timelineData) return [];
+    
+    // Extract country data from countryMap in the timeline data
+    const countryMap = new Map();
+    
+    timelineData.forEach(day => {
+        if (day.sum.countryMap && Array.isArray(day.sum.countryMap)) {
+            console.log('Country data from Cloudflare:', day.sum.countryMap);
+            day.sum.countryMap.forEach(countryData => {
+                console.log('Individual country entry:', countryData);
+                const country = countryData.clientCountryName || 'Unknown';
+                if (countryMap.has(country)) {
+                    const existing = countryMap.get(country);
+                    existing.requests += countryData.requests || 0;
+                    existing.bytes += countryData.bytes || 0;
+                    existing.threats += countryData.threats || 0;
+                } else {
+                    countryMap.set(country, {
+                        country: country,
+                        requests: countryData.requests || 0,
+                        bytes: countryData.bytes || 0,
+                        threats: countryData.threats || 0
+                    });
+                }
+            });
+        }
+    });
+    
+    return Array.from(countryMap.values())
+        .sort((a, b) => b.requests - a.requests)
+        .slice(0, 10);
+}
+
+function formatSecurityData(timelineData) {
+    if (!timelineData) return { actions: [], sources: [], total: 0 };
+    
+    // Extract security data from timeline data
+    let total = 0;
+    
+    timelineData.forEach(day => {
+        total += day.sum.threats || 0;
+    });
+    
+    return {
+        total: total,
+        actions: [{ action: 'threats', count: total }],
+        sources: [{ source: 'firewall', count: total }]
+    };
+}
+
+function formatPerformanceData(timelineData) {
+    if (!timelineData) return { statusCodes: [], methods: [], avgResponseTime: 0 };
+    
+    // Extract performance data from responseStatusMap in timeline data
+    const statusCodes = new Map();
+    
+    timelineData.forEach(day => {
+        if (day.sum.responseStatusMap && Array.isArray(day.sum.responseStatusMap)) {
+            day.sum.responseStatusMap.forEach(statusData => {
+                const status = statusData.edgeResponseStatus || 'unknown';
+                const requests = statusData.requests || 0;
+                statusCodes.set(status, (statusCodes.get(status) || 0) + requests);
+            });
+        }
+    });
+    
+    return {
+        statusCodes: Array.from(statusCodes.entries())
+            .map(([status, count]) => ({ status, count }))
+            .sort((a, b) => b.count - a.count),
+        methods: [{ method: 'GET', count: 0 }], // Simplified for now
+        avgResponseTime: 0 // Will need separate query for response times
+    };
+}
+
+function compareDataSources(cfData, dbData) {
+    const cfTotal = cfData?.reduce((sum, day) => sum + (day.sum.pageViews || 0), 0) || 0;
+    const dbTotal = dbData?.overview?.total_page_views || 0;
+    
+    return {
+        cloudflarePageViews: cfTotal,
+        databasePageViews: dbTotal,
+        difference: cfTotal - dbTotal,
+        accuracy: dbTotal > 0 ? Math.round((dbTotal / cfTotal) * 100) : 0
+    };
+}
+
+function formatBytes(bytes) {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return '0 Bytes';
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
 }
