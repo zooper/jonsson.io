@@ -423,6 +423,7 @@ body {
     align-items: center;
     justify-content: center;
     min-height: 300px;
+    max-height: 400px;
 }
 
 /* Enhanced featured image styles - responsive to image orientation */
@@ -445,6 +446,7 @@ body {
 @media (max-width: 768px) {
     .hero-featured {
         min-height: 250px;
+        max-height: 350px;
     }
 }
 
