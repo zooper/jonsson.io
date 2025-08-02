@@ -48,13 +48,23 @@ class PhotoGallery {
             if (!response.ok) throw new Error('Failed to load photos');
             
             const result = await response.json();
-            this.photos = result.photos;
-            this.currentPage = result.pagination.page;
-            this.totalPhotos = result.pagination.total;
-            this.totalPages = result.pagination.totalPages;
+            
+            // Handle both old (array) and new (paginated) response formats
+            if (Array.isArray(result)) {
+                // Old format - treat as all photos on one page
+                this.photos = result;
+                this.currentPage = 1;
+                this.totalPhotos = result.length;
+                this.totalPages = 1;
+            } else {
+                // New paginated format
+                this.photos = result.photos;
+                this.currentPage = result.pagination.page;
+                this.totalPhotos = result.pagination.total;
+                this.totalPages = result.pagination.totalPages;
+            }
             
             this.renderGallery();
-            this.renderPagination();
             
             if (loadingGrid) {
                 loadingGrid.style.opacity = '0';
@@ -66,6 +76,12 @@ class PhotoGallery {
             this.showError('Failed to load photos. Please try again later.');
         } finally {
             this.isLoading = false;
+            this.renderPagination(); // Render pagination after isLoading is set to false
+            
+            // Smooth scroll to gallery top if not on first page
+            if (page > 1) {
+                this.scrollToGallery();
+            }
         }
     }
     
@@ -495,6 +511,19 @@ class PhotoGallery {
         const countElement = document.querySelector('.photo-count');
         if (countElement) {
             countElement.textContent = this.totalPhotos;
+        }
+    }
+    
+    scrollToGallery() {
+        const gallerySection = document.querySelector('#gallery');
+        if (gallerySection) {
+            const yOffset = -80; // Small offset for better visual positioning
+            const y = gallerySection.getBoundingClientRect().top + window.pageYOffset + yOffset;
+            
+            window.scrollTo({
+                top: Math.max(0, y), // Don't scroll past the top of the page
+                behavior: 'smooth'
+            });
         }
     }
     
