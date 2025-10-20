@@ -4035,3 +4035,25 @@ textarea:focus-visible {
     }
 }
 
+/* Weekly Reports Settings */
+.info-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--surface-secondary);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.info-text svg {
+    flex-shrink: 0;
+    color: var(--primary);
+}
+
+.info-text strong {
+    color: var(--primary);
+    font-weight: 600;
+}
+

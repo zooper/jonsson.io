@@ -1,5 +1,5 @@
 -- Database schema for jonsson.io photography website
--- Current version: 6
+-- Current version: 7
 
 -- Database version tracking
 CREATE TABLE IF NOT EXISTS database_version (
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS database_version (
 
 -- Insert current version if not exists
 INSERT OR IGNORE INTO database_version (id, version, description)
-VALUES (1, 6, 'Add photo view tracking');
+VALUES (1, 7, 'Add email reports tracking');
 
 -- Photos table for storing photo metadata and EXIF data
 CREATE TABLE IF NOT EXISTS photos (
@@ -159,3 +159,20 @@ CREATE TABLE IF NOT EXISTS photo_views (
 CREATE INDEX IF NOT EXISTS idx_photo_views_photo_id ON photo_views(photo_id);
 CREATE INDEX IF NOT EXISTS idx_photo_views_viewed_at ON photo_views(viewed_at);
 CREATE INDEX IF NOT EXISTS idx_photo_views_session_id ON photo_views(session_id);
+
+-- Email reports table for tracking sent email reports
+CREATE TABLE IF NOT EXISTS email_reports (
+  id TEXT PRIMARY KEY,
+  report_type TEXT NOT NULL,
+  sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  recipient_email TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'sent',
+  error_message TEXT,
+  stats_snapshot TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_reports_sent_at ON email_reports(sent_at);
+CREATE INDEX IF NOT EXISTS idx_email_reports_type ON email_reports(report_type);
+CREATE INDEX IF NOT EXISTS idx_email_reports_status ON email_reports(status);

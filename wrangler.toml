@@ -21,6 +21,10 @@ database_id = "66dd8c3c-125f-4627-a0b7-810a65dd7182"
 [build]
 command = ""
 
+# Cron Triggers for scheduled tasks
+[triggers]
+crons = ["0 9 * * 1"]  # Every Monday at 9:00 AM UTC
+
 [vars]
 ENVIRONMENT = "development"
 # B2 credentials are loaded from .dev.vars file automatically

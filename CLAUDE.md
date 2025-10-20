@@ -30,15 +30,19 @@ Production secrets (use `wrangler secret put <KEY_NAME>`):
 - `B2_BUCKET_NAME` - Backblaze B2 bucket name
 - `CLOUDFLARE_ZONE_ID` - Cloudflare zone ID for analytics (optional)
 - `CLOUDFLARE_API_TOKEN` - Cloudflare API token for analytics (optional)
+- `RESEND_API_KEY` - Resend API key for weekly email reports
+- `ADMIN_EMAIL` - Email address for receiving weekly reports
 
 ## Architecture
 
 ### Core Stack
 - **Runtime**: Cloudflare Workers (edge computing, Node.js compatibility enabled)
-- **Database**: Cloudflare D1 SQLite (current schema version: 5)
+- **Database**: Cloudflare D1 SQLite (current schema version: 7)
 - **Storage**: Backblaze B2 for photo file storage and CDN
 - **Static Assets**: Cloudflare Workers Assets binding (./public directory)
 - **Domain**: jonsson.io and www.jonsson.io (configured in wrangler.toml routes)
+- **Email**: Resend for weekly analytics reports
+- **Cron**: Cloudflare Cron Triggers for scheduled tasks
 
 ### Source Files
 - `src/index.js` (3544 lines) - Main application entry point:
@@ -107,7 +111,7 @@ Production secrets (use `wrangler secret put <KEY_NAME>`):
 - `/api/analytics/*` - Analytics data (protected)
 - `/api/settings/*` - Settings management (protected)
 
-### Database Schema (Version 6)
+### Database Schema (Version 7)
 
 Tables:
 - `database_version` - Schema version tracking
@@ -118,6 +122,7 @@ Tables:
 - `page_views` - Page view tracking (URL, title, time on page, response codes, response time)
 - `magic_links` - Authentication tokens (email, token, expiration, usage tracking)
 - `photo_views` - Photo view tracking (lightbox opens only, session, device, location)
+- `email_reports` - Weekly email report tracking (type, period, recipient, status, stats snapshot)
 
 Key indexes for performance:
 - Photos: upload_date, camera_make, b2_file_id

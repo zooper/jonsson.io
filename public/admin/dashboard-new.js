@@ -3925,3 +3925,50 @@ function refreshPhotoStats() {
 window.loadPhotoStats = loadPhotoStats;
 window.changePhotoStatsPeriod = changePhotoStatsPeriod;
 window.refreshPhotoStats = refreshPhotoStats;
+
+// Weekly Report Functions
+async function sendTestReport() {
+    const button = document.getElementById('sendTestReportBtn');
+    if (!button) return;
+
+    button.disabled = true;
+    button.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning">
+            <polyline points="23,4 23,10 17,10"></polyline>
+            <polyline points="1,20 1,14 7,14"></polyline>
+            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0113.51 15"></path>
+        </svg>
+        Sending...
+    `;
+
+    try {
+        const response = await fetch('/admin/api/send-test-report', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${adminToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to send test report');
+        }
+
+        const data = await response.json();
+        toast.show('success', 'Success', 'Test report sent! Check your email at tomas@jonsson.io', 5000);
+    } catch (error) {
+        console.error('Error sending test report:', error);
+        toast.show('error', 'Error', 'Failed to send test report: ' + error.message);
+    } finally {
+        button.disabled = false;
+        button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22,2 15,22 11,13 2,9"></polygon>
+            </svg>
+            Send Test Report Now
+        `;
+    }
+}
+
+window.sendTestReport = sendTestReport;

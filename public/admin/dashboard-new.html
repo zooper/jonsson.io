@@ -736,7 +736,59 @@
                             </button>
                         </div>
                     </div>
-                    
+
+                    <!-- Weekly Reports Settings -->
+                    <div class="settings-card">
+                        <div class="settings-header">
+                            <h3>📊 Weekly Analytics Reports</h3>
+                            <p>Automated email reports sent every Monday at 9:00 AM</p>
+                        </div>
+
+                        <div class="settings-form">
+                            <div class="form-group">
+                                <label>Report Recipient</label>
+                                <div class="info-text">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
+                                    Reports are sent to: <strong>tomas@jonsson.io</strong>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Schedule</label>
+                                <div class="info-text">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12,6 12,12 16,14"></polyline>
+                                    </svg>
+                                    Every Monday at 9:00 AM UTC
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Report Contents</label>
+                                <ul style="margin: 0; padding-left: 20px; color: #4a5568;">
+                                    <li>Photo view statistics (total views, unique viewers, most viewed photos)</li>
+                                    <li>Visitor analytics (sessions, page views, device breakdown)</li>
+                                    <li>Geographic distribution (top countries)</li>
+                                    <li>Week-over-week data from the past 7 days</li>
+                                </ul>
+                            </div>
+
+                            <div class="form-actions">
+                                <button class="btn btn-primary" onclick="sendTestReport()" id="sendTestReportBtn">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                                        <polygon points="22,2 15,22 11,13 2,9"></polygon>
+                                    </svg>
+                                    Send Test Report Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- About Section Settings -->
                     <div class="settings-card">
                         <div class="settings-header">

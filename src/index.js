@@ -7,6 +7,7 @@ import { B2Storage } from './storage.js';
 import { ExifExtractor } from './exif.js';
 import { PhotoDatabase } from './database.js';
 import { LocationService } from './location.js';
+import { generateWeeklyReportHTML, generateWeeklyReportText } from './email-templates/weekly-report.js';
 
 // Sanitized error responses to prevent information disclosure
 function createErrorResponse(status, publicMessage, internalError = null) {
@@ -145,6 +146,20 @@ export default {
             await trackVisitor(request, env, responseCode, responseTime);
             
             return addSecurityHeaders(response);
+        }
+    },
+
+    // Cloudflare Cron Triggers handler for scheduled tasks
+    async scheduled(event, env, ctx) {
+        try {
+            console.log('Cron trigger fired:', event.cron);
+
+            // Send weekly report every Monday at 9:00 AM
+            if (event.cron === '0 9 * * 1') {
+                await handleWeeklyReport(env);
+            }
+        } catch (error) {
+            console.error('Scheduled task error:', error);
         }
     }
 };
@@ -351,6 +366,12 @@ async function handleAdminRequest(request, env, pathname) {
         case '/admin/api/photo-stats':
             if (request.method === 'GET') {
                 return handleGetPhotoStats(request, env);
+            }
+            break;
+
+        case '/admin/api/send-test-report':
+            if (request.method === 'POST') {
+                return handleSendTestReport(request, env);
             }
             break;
     }
@@ -2864,11 +2885,7 @@ async function handleGetVisitorAnalytics(request, env) {
     }
 }
 
-function formatDuration(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
-}
+// formatDuration function moved to line ~4035 with enhanced hours support
 
 // Test Data Generation Function (for development only)
 async function handleGenerateTestVisitors(request, env) {
@@ -3767,4 +3784,276 @@ async function handleGetPhotoStats(request, env) {
             headers: { 'Content-Type': 'application/json' }
         });
     }
+}
+
+// Weekly Email Report Functions
+async function handleWeeklyReport(env) {
+    console.log('Generating weekly report...');
+
+    try {
+        const reportData = await generateWeeklyReportData(env);
+        await sendWeeklyReportEmail(env, reportData);
+
+        // Log report to database
+        await logEmailReport(env, reportData, 'sent');
+
+        console.log('Weekly report sent successfully');
+    } catch (error) {
+        console.error('Failed to send weekly report:', error);
+        await logEmailReport(env, null, 'failed', error.message);
+    }
+}
+
+async function handleSendTestReport(request, env) {
+    try {
+        console.log('Sending test report...');
+
+        const reportData = await generateWeeklyReportData(env);
+        await sendWeeklyReportEmail(env, reportData);
+
+        // Log test report
+        await logEmailReport(env, reportData, 'sent', null, 'test');
+
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'Test report sent successfully'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (error) {
+        console.error('Error sending test report:', error);
+        return new Response(JSON.stringify({
+            error: 'Failed to send test report',
+            details: error.message
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function generateWeeklyReportData(env) {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const periodStart = oneWeekAgo.toISOString().split('T')[0];
+    const periodEnd = now.toISOString().split('T')[0];
+
+    // Get photo view stats
+    const photoViewStats = await env.DB.prepare(`
+        SELECT
+            COUNT(*) as total_views,
+            COUNT(DISTINCT session_id) as unique_viewers,
+            COUNT(DISTINCT photo_id) as photos_viewed
+        FROM photo_views
+        WHERE viewed_at >= datetime('now', '-7 days')
+    `).first();
+
+    // Get most viewed photos
+    const mostViewedPhotos = await env.DB.prepare(`
+        SELECT
+            pv.photo_id,
+            p.title,
+            p.filename,
+            p.url,
+            COUNT(*) as view_count,
+            COUNT(DISTINCT pv.session_id) as unique_viewers
+        FROM photo_views pv
+        LEFT JOIN photos p ON pv.photo_id = p.id
+        WHERE pv.viewed_at >= datetime('now', '-7 days')
+        GROUP BY pv.photo_id, p.title, p.filename, p.url
+        ORDER BY view_count DESC
+        LIMIT 10
+    `).all();
+
+    // Get visitor stats
+    const visitorStats = await env.DB.prepare(`
+        SELECT
+            COUNT(DISTINCT id) as total_sessions,
+            COUNT(DISTINCT ip_hash) as unique_visitors
+        FROM visitor_sessions
+        WHERE session_start >= datetime('now', '-7 days')
+    `).first();
+
+    // Get page views
+    const pageViewStats = await env.DB.prepare(`
+        SELECT COUNT(*) as total_page_views
+        FROM page_views
+        WHERE viewed_at >= datetime('now', '-7 days')
+    `).first();
+
+    // Get device breakdown
+    const deviceStats = await env.DB.prepare(`
+        SELECT
+            device_type,
+            COUNT(*) as count
+        FROM visitor_sessions
+        WHERE session_start >= datetime('now', '-7 days')
+        GROUP BY device_type
+    `).all();
+
+    const totalDevices = deviceStats.results?.reduce((sum, d) => sum + d.count, 0) || 0;
+    const mobileCount = deviceStats.results?.find(d => d.device_type === 'Mobile')?.count || 0;
+    const mobilePercentage = totalDevices > 0 ? Math.round((mobileCount / totalDevices) * 100) : 0;
+
+    // Get average session duration
+    const durationStats = await env.DB.prepare(`
+        SELECT AVG(time_on_page) as avg_duration
+        FROM page_views
+        WHERE viewed_at >= datetime('now', '-7 days')
+        AND time_on_page IS NOT NULL
+    `).first();
+
+    const avgDurationSeconds = durationStats?.avg_duration || 0;
+    const avgDurationFormatted = formatDuration(avgDurationSeconds);
+
+    // Get top countries
+    const topCountries = await env.DB.prepare(`
+        SELECT
+            country_name,
+            country_code,
+            COUNT(*) as count
+        FROM visitor_sessions
+        WHERE session_start >= datetime('now', '-7 days')
+        AND country_name IS NOT NULL
+        GROUP BY country_name, country_code
+        ORDER BY count DESC
+        LIMIT 5
+    `).all();
+
+    const totalCountries = topCountries.results?.reduce((sum, c) => sum + c.count, 0) || 1;
+    const formattedCountries = topCountries.results?.map(country => ({
+        name: country.country_name,
+        count: country.count,
+        percentage: Math.round((country.count / totalCountries) * 100),
+        flag: getFlagEmoji(country.country_code)
+    })) || [];
+
+    const avgViewsPerPhoto = photoViewStats?.photos_viewed > 0
+        ? (photoViewStats.total_views / photoViewStats.photos_viewed).toFixed(1)
+        : '0';
+
+    return {
+        period: {
+            start: periodStart,
+            end: periodEnd
+        },
+        photoStats: {
+            totalViews: photoViewStats?.total_views || 0,
+            uniqueViewers: photoViewStats?.unique_viewers || 0,
+            photosViewed: photoViewStats?.photos_viewed || 0,
+            avgViewsPerPhoto: avgViewsPerPhoto,
+            mostViewed: mostViewedPhotos.results || []
+        },
+        visitorStats: {
+            totalSessions: visitorStats?.total_sessions || 0,
+            totalPageViews: pageViewStats?.total_page_views || 0,
+            avgSessionDuration: avgDurationFormatted,
+            mobilePercentage: mobilePercentage,
+            topCountries: formattedCountries
+        },
+        reportDate: now.toISOString().split('T')[0]
+    };
+}
+
+async function sendWeeklyReportEmail(env, reportData) {
+    const adminEmail = env.ADMIN_EMAIL || 'tomas@jonsson.io';
+    const resendApiKey = env.RESEND_API_KEY;
+
+    if (!resendApiKey) {
+        throw new Error('RESEND_API_KEY not configured');
+    }
+
+    const htmlContent = generateWeeklyReportHTML(reportData);
+    const textContent = generateWeeklyReportText(reportData);
+
+    const emailPayload = {
+        from: 'Analytics <analytics@jonsson.io>',
+        to: [adminEmail],
+        subject: `📊 Weekly Analytics Report - ${reportData.period.start} to ${reportData.period.end}`,
+        html: htmlContent,
+        text: textContent
+    };
+
+    const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(emailPayload)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorData}`);
+    }
+
+    const result = await response.json();
+    console.log('Email sent via Resend:', result.id);
+
+    return result;
+}
+
+async function logEmailReport(env, reportData, status, errorMessage = null, reportType = 'weekly') {
+    try {
+        const reportId = crypto.randomUUID();
+        const statsSnapshot = reportData ? JSON.stringify({
+            photoViews: reportData.photoStats.totalViews,
+            uniqueViewers: reportData.photoStats.uniqueViewers,
+            sessions: reportData.visitorStats.totalSessions,
+            pageViews: reportData.visitorStats.totalPageViews
+        }) : null;
+
+        const periodStart = reportData?.period?.start || new Date().toISOString().split('T')[0];
+        const periodEnd = reportData?.period?.end || new Date().toISOString().split('T')[0];
+
+        await env.DB.prepare(`
+            INSERT INTO email_reports (
+                id, report_type, sent_at, period_start, period_end,
+                recipient_email, status, error_message, stats_snapshot
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+            reportId,
+            reportType,
+            new Date().toISOString(),
+            periodStart,
+            periodEnd,
+            env.ADMIN_EMAIL || 'tomas@jonsson.io',
+            status,
+            errorMessage,
+            statsSnapshot
+        ).run();
+    } catch (error) {
+        console.error('Failed to log email report:', error);
+    }
+}
+
+function formatDuration(seconds) {
+    if (!seconds || seconds < 1) return '0s';
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
+}
+
+function getFlagEmoji(countryCode) {
+    if (!countryCode || countryCode.length !== 2) {
+        return '🌍';
+    }
+
+    const codePoints = countryCode
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt());
+
+    return String.fromCodePoint(...codePoints);
 }
