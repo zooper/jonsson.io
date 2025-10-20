@@ -159,8 +159,10 @@ function switchSection(sectionName) {
         quotes: 'AI Quotes',
         themes: 'Themes',
         dashboard: 'Dashboard',
+        'photo-stats': 'Photo Statistics',
         visitors: 'Visitors',
-        settings: 'Settings'
+        settings: 'Settings',
+        cloudflare: 'Cloudflare Analytics'
     };
     
     if (pageTitle) {
@@ -197,8 +199,14 @@ function loadSectionData(sectionName) {
         case 'dashboard':
             loadDashboard();
             break;
+        case 'photo-stats':
+            loadPhotoStats();
+            break;
         case 'visitors':
             loadVisitorAnalytics();
+            break;
+        case 'cloudflare':
+            loadCloudflareAnalytics();
             break;
     }
 }
@@ -3722,3 +3730,198 @@ window.showCacheBreakdown = showCacheBreakdown;
 window.showSecurityBreakdown = showSecurityBreakdown;
 window.closeDrillDownModal = closeDrillDownModal;
 window.exportDrillDownData = exportDrillDownData;
+
+// Photo Stats Functions
+let currentPhotoStatsPeriod = 30;
+
+async function loadPhotoStats(period = currentPhotoStatsPeriod) {
+    try {
+        const response = await fetch(`/admin/api/photo-stats?period=${period}`, {
+            headers: {
+                'Authorization': `Bearer ${adminToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Photo stats error:', errorData);
+            throw new Error(errorData.error || 'Failed to load photo stats');
+        }
+
+        const data = await response.json();
+        console.log('Photo stats data:', data);
+        displayPhotoStats(data);
+    } catch (error) {
+        console.error('Error loading photo stats:', error);
+        toast.show('error', 'Error', 'Failed to load photo statistics: ' + error.message);
+    }
+}
+
+function displayPhotoStats(data) {
+    console.log('Displaying photo stats:', data);
+
+    if (!data || !data.overall) {
+        console.error('Invalid data structure:', data);
+        return;
+    }
+
+    // Update overview cards
+    const totalViewsEl = document.getElementById('totalPhotoViews');
+    const uniqueViewersEl = document.getElementById('uniquePhotoViewers');
+    const photosViewedEl = document.getElementById('photosViewed');
+    const avgViewsEl = document.getElementById('avgViewsPerPhoto');
+
+    if (totalViewsEl) totalViewsEl.textContent = (data.overall.totalViews || 0).toLocaleString();
+    if (uniqueViewersEl) uniqueViewersEl.textContent = (data.overall.uniqueViewers || 0).toLocaleString();
+    if (photosViewedEl) photosViewedEl.textContent = (data.overall.photosViewed || 0).toLocaleString();
+
+    const avgViewsPerPhoto = data.overall.photosViewed > 0
+        ? (data.overall.totalViews / data.overall.photosViewed).toFixed(1)
+        : '0';
+    if (avgViewsEl) avgViewsEl.textContent = avgViewsPerPhoto;
+
+    // Display most viewed photos
+    displayMostViewedPhotos(data.mostViewed);
+
+    // Display device breakdown
+    displayPhotoDeviceBreakdown(data.devices);
+
+    // Display geographic breakdown
+    displayPhotoGeoBreakdown(data.geographic);
+}
+
+function displayMostViewedPhotos(photos) {
+    const container = document.getElementById('mostViewedPhotos');
+
+    if (!photos || photos.length === 0) {
+        container.innerHTML = '<div class="empty-state">No photo views recorded yet</div>';
+        return;
+    }
+
+    const html = `
+        <div class="most-viewed-list">
+            ${photos.map((photo, index) => `
+                <div class="most-viewed-item">
+                    <div class="photo-rank">#${index + 1}</div>
+                    <div class="photo-thumbnail">
+                        <img src="${photo.url}" alt="${photo.title || 'Untitled'}" loading="lazy">
+                    </div>
+                    <div class="photo-info">
+                        <div class="photo-title">${photo.title || 'Untitled'}</div>
+                        <div class="photo-filename">${photo.filename}</div>
+                    </div>
+                    <div class="photo-metrics">
+                        <div class="metric">
+                            <span class="metric-value">${photo.view_count}</span>
+                            <span class="metric-label">Views</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-value">${photo.unique_viewers}</span>
+                            <span class="metric-label">Unique</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function displayPhotoDeviceBreakdown(devices) {
+    const container = document.getElementById('photoDeviceBreakdown');
+
+    if (!devices || devices.length === 0) {
+        container.innerHTML = '<div class="empty-state">No device data available</div>';
+        return;
+    }
+
+    const total = devices.reduce((sum, d) => sum + d.view_count, 0);
+
+    const html = `
+        <div class="breakdown-list">
+            ${devices.map(device => {
+                const percentage = total > 0 ? ((device.view_count / total) * 100).toFixed(1) : 0;
+                const deviceIcon = device.device_type === 'Mobile' ? '📱' :
+                                 device.device_type === 'Desktop' ? '💻' : '📱';
+                return `
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">
+                            <span class="breakdown-icon">${deviceIcon}</span>
+                            <span>${device.device_type || 'Unknown'}</span>
+                        </div>
+                        <div class="breakdown-stats">
+                            <span class="breakdown-count">${device.view_count}</span>
+                            <span class="breakdown-percentage">${percentage}%</span>
+                        </div>
+                        <div class="breakdown-bar">
+                            <div class="breakdown-bar-fill" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function displayPhotoGeoBreakdown(countries) {
+    const container = document.getElementById('photoGeoBreakdown');
+
+    if (!countries || countries.length === 0) {
+        container.innerHTML = '<div class="empty-state">No geographic data available</div>';
+        return;
+    }
+
+    const total = countries.reduce((sum, c) => sum + c.view_count, 0);
+
+    const html = `
+        <div class="breakdown-list">
+            ${countries.map(country => {
+                const percentage = total > 0 ? ((country.view_count / total) * 100).toFixed(1) : 0;
+                return `
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">
+                            <span class="breakdown-icon">${country.country_code ? getFlagEmoji(country.country_code) : '🌍'}</span>
+                            <span>${country.country_name || 'Unknown'}</span>
+                        </div>
+                        <div class="breakdown-stats">
+                            <span class="breakdown-count">${country.view_count}</span>
+                            <span class="breakdown-percentage">${percentage}%</span>
+                        </div>
+                        <div class="breakdown-bar">
+                            <div class="breakdown-bar-fill" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function getFlagEmoji(countryCode) {
+    if (!countryCode || countryCode.length !== 2) return '🌍';
+    const codePoints = countryCode
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt());
+    return String.fromCodePoint(...codePoints);
+}
+
+function changePhotoStatsPeriod() {
+    const selector = document.getElementById('photoStatsPeriodSelector');
+    currentPhotoStatsPeriod = parseInt(selector.value);
+    loadPhotoStats(currentPhotoStatsPeriod);
+}
+
+function refreshPhotoStats() {
+    loadPhotoStats(currentPhotoStatsPeriod);
+    toast.show('info', 'Refreshing', 'Photo statistics are being refreshed...', 2000);
+}
+
+window.loadPhotoStats = loadPhotoStats;
+window.changePhotoStatsPeriod = changePhotoStatsPeriod;
+window.refreshPhotoStats = refreshPhotoStats;

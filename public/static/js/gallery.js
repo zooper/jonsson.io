@@ -312,11 +312,17 @@ class PhotoGallery {
     
     openLightbox(index) {
         if (index < 0 || index >= this.photos.length) return;
-        
+
         this.currentPhotoIndex = index;
         this.lightboxOpen = true;
         const photo = this.photos[index];
         const lightbox = document.getElementById('lightbox');
+
+        // Track photo view - user intentionally opened the photo in lightbox
+        // Use dbId (database UUID) for tracking, not id (B2 file ID)
+        if (photo.dbId) {
+            this.trackPhotoView(photo.dbId);
+        }
         
         // Update lightbox content
         const lightboxImage = lightbox.querySelector('.lightbox-image');
@@ -676,6 +682,25 @@ class PhotoGallery {
     
     isTouchDevice() {
         return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    }
+
+    async trackPhotoView(photoId) {
+        try {
+            // Send photo view event to backend
+            await fetch('/api/photo-view', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    photoId: photoId,
+                    timestamp: new Date().toISOString()
+                })
+            });
+        } catch (error) {
+            // Silently fail - analytics shouldn't break user experience
+            console.debug('Photo view tracking failed:', error);
+        }
     }
     
     async loadMorePhotos() {

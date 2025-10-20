@@ -1,5 +1,5 @@
 -- Database schema for jonsson.io photography website
--- Current version: 5
+-- Current version: 6
 
 -- Database version tracking
 CREATE TABLE IF NOT EXISTS database_version (
@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS database_version (
 );
 
 -- Insert current version if not exists
-INSERT OR IGNORE INTO database_version (id, version, description) 
-VALUES (1, 5, 'Add photo map visibility control');
+INSERT OR IGNORE INTO database_version (id, version, description)
+VALUES (1, 6, 'Add photo view tracking');
 
 -- Photos table for storing photo metadata and EXIF data
 CREATE TABLE IF NOT EXISTS photos (
@@ -140,3 +140,22 @@ CREATE TABLE IF NOT EXISTS magic_links (
 CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
 CREATE INDEX IF NOT EXISTS idx_magic_links_email ON magic_links(email);
 CREATE INDEX IF NOT EXISTS idx_magic_links_expires ON magic_links(expires_at);
+
+-- Photo views table for tracking when users view photos in lightbox/full-size mode
+CREATE TABLE IF NOT EXISTS photo_views (
+  id TEXT PRIMARY KEY,
+  photo_id TEXT NOT NULL,
+  viewed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  session_id TEXT,
+  user_agent TEXT,
+  country_code TEXT,
+  country_name TEXT,
+  city TEXT,
+  device_type TEXT,
+  browser TEXT,
+  FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_photo_views_photo_id ON photo_views(photo_id);
+CREATE INDEX IF NOT EXISTS idx_photo_views_viewed_at ON photo_views(viewed_at);
+CREATE INDEX IF NOT EXISTS idx_photo_views_session_id ON photo_views(session_id);

@@ -347,6 +347,12 @@ async function handleAdminRequest(request, env, pathname) {
                 return handleUpdatePhotoMapVisibility(request, env);
             }
             break;
+
+        case '/admin/api/photo-stats':
+            if (request.method === 'GET') {
+                return handleGetPhotoStats(request, env);
+            }
+            break;
     }
     
     // Serve static admin files
@@ -374,7 +380,13 @@ async function handleApiRequest(request, env, pathname) {
                 
             case '/api/hero-quote':
                 return handleGetCurrentHeroQuote(request, env);
-            
+
+            case '/api/photo-view':
+                if (request.method === 'POST') {
+                    return handleLogPhotoView(request, env);
+                }
+                return new Response('Method not allowed', { status: 405 });
+
             default:
                 return new Response('API endpoint not found', { status: 404 });
         }
@@ -3539,7 +3551,220 @@ function compareDataSources(cfData, dbData) {
 function formatBytes(bytes) {
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     if (bytes === 0) return '0 Bytes';
-    
+
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Photo View Tracking Handlers
+async function handleLogPhotoView(request, env) {
+    try {
+        const { photoId, timestamp } = await request.json();
+
+        if (!photoId) {
+            return new Response(JSON.stringify({ error: 'Photo ID is required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Verify photo exists before logging view
+        const photoExists = await env.DB.prepare(`
+            SELECT id FROM photos WHERE id = ? LIMIT 1
+        `).bind(photoId).first();
+
+        if (!photoExists) {
+            // Photo doesn't exist, silently ignore (don't error out the user experience)
+            return new Response(JSON.stringify({
+                success: true,
+                message: 'Photo not found, view not logged'
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Get session information from request
+        const userAgent = request.headers.get('User-Agent') || '';
+        const cfData = request.cf || {};
+
+        // Parse user agent for device info
+        const deviceInfo = parseUserAgent(userAgent);
+
+        // Get or create session ID from cookie or generate new one
+        const cookies = request.headers.get('Cookie') || '';
+        let sessionId = null;
+
+        const sessionMatch = cookies.match(/session_id=([^;]+)/);
+        if (sessionMatch) {
+            sessionId = sessionMatch[1];
+        } else {
+            sessionId = crypto.randomUUID();
+        }
+
+        // Create photo view record
+        const viewId = crypto.randomUUID();
+        await env.DB.prepare(`
+            INSERT INTO photo_views (
+                id, photo_id, viewed_at, session_id, user_agent,
+                country_code, country_name, city, device_type, browser
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+            viewId,
+            photoId,
+            timestamp || new Date().toISOString(),
+            sessionId,
+            userAgent,
+            cfData.country || null,
+            cfData.country || null,
+            cfData.city || null,
+            deviceInfo.deviceType,
+            deviceInfo.browser
+        ).run();
+
+        return new Response(JSON.stringify({
+            success: true,
+            viewId: viewId
+        }), {
+            headers: {
+                'Content-Type': 'application/json',
+                'Set-Cookie': `session_id=${sessionId}; Path=/; Max-Age=86400; SameSite=Lax`
+            }
+        });
+
+    } catch (error) {
+        console.error('Error logging photo view:', error);
+        // Don't fail the user experience, just log the error
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'View tracking unavailable'
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+}
+
+async function handleGetPhotoStats(request, env) {
+    try {
+        const url = new URL(request.url);
+        const period = url.searchParams.get('period') || '30'; // days
+        const photoId = url.searchParams.get('photoId');
+
+        // Get overall photo view statistics
+        const overallStats = await env.DB.prepare(`
+            SELECT
+                COUNT(*) as total_views,
+                COUNT(DISTINCT session_id) as unique_viewers,
+                COUNT(DISTINCT photo_id) as photos_viewed
+            FROM photo_views
+            WHERE viewed_at > datetime('now', '-${period} days')
+        `).first();
+
+        // Get most viewed photos
+        const mostViewedPhotos = await env.DB.prepare(`
+            SELECT
+                pv.photo_id,
+                p.title,
+                p.filename,
+                p.url,
+                COUNT(*) as view_count,
+                COUNT(DISTINCT pv.session_id) as unique_viewers,
+                MAX(pv.viewed_at) as last_viewed
+            FROM photo_views pv
+            LEFT JOIN photos p ON pv.photo_id = p.id
+            WHERE pv.viewed_at > datetime('now', '-${period} days')
+            GROUP BY pv.photo_id, p.title, p.filename, p.url
+            ORDER BY view_count DESC
+            LIMIT 20
+        `).all();
+
+        // Get view trends over time (daily)
+        const dailyTrends = await env.DB.prepare(`
+            SELECT
+                DATE(viewed_at) as date,
+                COUNT(*) as views,
+                COUNT(DISTINCT session_id) as unique_viewers,
+                COUNT(DISTINCT photo_id) as photos_viewed
+            FROM photo_views
+            WHERE viewed_at > datetime('now', '-${period} days')
+            GROUP BY DATE(viewed_at)
+            ORDER BY date ASC
+        `).all();
+
+        // Get device breakdown
+        const deviceBreakdown = await env.DB.prepare(`
+            SELECT
+                device_type,
+                COUNT(*) as view_count
+            FROM photo_views
+            WHERE viewed_at > datetime('now', '-${period} days')
+            GROUP BY device_type
+            ORDER BY view_count DESC
+        `).all();
+
+        // Get geographic breakdown
+        const geoBreakdown = await env.DB.prepare(`
+            SELECT
+                country_name,
+                country_code,
+                COUNT(*) as view_count
+            FROM photo_views
+            WHERE viewed_at > datetime('now', '-${period} days')
+            AND country_name IS NOT NULL
+            GROUP BY country_name, country_code
+            ORDER BY view_count DESC
+            LIMIT 10
+        `).all();
+
+        // If specific photo requested, get detailed stats for that photo
+        let photoDetails = null;
+        if (photoId) {
+            photoDetails = await env.DB.prepare(`
+                SELECT
+                    COUNT(*) as total_views,
+                    COUNT(DISTINCT session_id) as unique_viewers,
+                    MIN(viewed_at) as first_viewed,
+                    MAX(viewed_at) as last_viewed
+                FROM photo_views
+                WHERE photo_id = ?
+            `).bind(photoId).first();
+
+            // Get view trend for specific photo
+            const photoTrend = await env.DB.prepare(`
+                SELECT
+                    DATE(viewed_at) as date,
+                    COUNT(*) as views
+                FROM photo_views
+                WHERE photo_id = ? AND viewed_at > datetime('now', '-${period} days')
+                GROUP BY DATE(viewed_at)
+                ORDER BY date ASC
+            `).bind(photoId).all();
+
+            photoDetails.trend = photoTrend.results || [];
+        }
+
+        return new Response(JSON.stringify({
+            period: parseInt(period),
+            overall: {
+                totalViews: overallStats?.total_views || 0,
+                uniqueViewers: overallStats?.unique_viewers || 0,
+                photosViewed: overallStats?.photos_viewed || 0
+            },
+            mostViewed: mostViewedPhotos.results || [],
+            trends: {
+                daily: dailyTrends.results || []
+            },
+            devices: deviceBreakdown.results || [],
+            geographic: geoBreakdown.results || [],
+            photoDetails: photoDetails
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+    } catch (error) {
+        console.error('Error getting photo stats:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
 }

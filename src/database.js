@@ -269,7 +269,8 @@ export class PhotoDatabase {
         }
         
         return {
-            id: row.b2_file_id, // Use B2 file ID as the external ID
+            id: row.b2_file_id, // Keep B2 file ID as the primary ID for backward compatibility
+            dbId: row.id, // Add database UUID for new features like photo view tracking
             title: title,
             description: row.description || '',
             url: row.url,
