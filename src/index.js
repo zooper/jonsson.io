@@ -94,11 +94,22 @@ export default {
             if (pathname.startsWith('/api/')) {
                 response = await handleApiRequest(request, env, pathname);
                 responseCode = response.status;
-                
+
                 // Track visitor data for non-admin API calls
                 const responseTime = Date.now() - startTime;
                 await trackVisitor(request, env, responseCode, responseTime);
-                
+
+                return addSecurityHeaders(response);
+            }
+
+            // Screensaver route - fullscreen photo slideshow
+            if (pathname === '/screensaver') {
+                response = handleScreensaverRequest(request);
+                responseCode = response.status;
+
+                const responseTime = Date.now() - startTime;
+                await trackVisitor(request, env, responseCode, responseTime);
+
                 return addSecurityHeaders(response);
             }
 
@@ -416,20 +427,288 @@ async function handleApiRequest(request, env, pathname) {
     }
 }
 
+function handleScreensaverRequest(request) {
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Screensaver - jonsson.io</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .slideshow-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide.active {
+            opacity: 1;
+        }
+
+        .slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .info.show {
+            opacity: 1;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .controls.show {
+            opacity: 1;
+        }
+
+        .controls button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 8px 16px;
+            margin: 0 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .controls button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">Loading photos...</div>
+    <div class="slideshow-container" id="slideshow"></div>
+    <div class="info" id="info"></div>
+    <div class="controls" id="controls">
+        <button onclick="togglePause()">⏯ Pause</button>
+        <button onclick="previousPhoto()">◀ Previous</button>
+        <button onclick="nextPhoto()">Next ▶</button>
+    </div>
+
+    <script>
+        let photos = [];
+        let currentIndex = 0;
+        let isPaused = false;
+        let autoPlayInterval = null;
+        const SLIDE_DURATION = 10000; // 10 seconds per photo
+
+        async function loadPhotos() {
+            try {
+                // Fetch all photos (no pagination limit for screensaver)
+                const response = await fetch('/api/photos?limit=100');
+                const data = await response.json();
+                photos = data.photos || [];
+
+                if (photos.length === 0) {
+                    document.getElementById('loading').textContent = 'No photos available';
+                    return;
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                initSlideshow();
+                startAutoPlay();
+            } catch (error) {
+                console.error('Failed to load photos:', error);
+                document.getElementById('loading').textContent = 'Failed to load photos';
+            }
+        }
+
+        function initSlideshow() {
+            const container = document.getElementById('slideshow');
+            container.innerHTML = '';
+
+            photos.forEach((photo, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'slide';
+                if (index === 0) slide.classList.add('active');
+
+                const img = document.createElement('img');
+                img.src = photo.url;
+                img.alt = photo.title || 'Photo';
+
+                slide.appendChild(img);
+                container.appendChild(slide);
+            });
+
+            updateInfo();
+        }
+
+        function showSlide(index) {
+            const slides = document.querySelectorAll('.slide');
+            slides.forEach((slide, i) => {
+                slide.classList.toggle('active', i === index);
+            });
+            updateInfo();
+        }
+
+        function nextPhoto() {
+            currentIndex = (currentIndex + 1) % photos.length;
+            showSlide(currentIndex);
+        }
+
+        function previousPhoto() {
+            currentIndex = (currentIndex - 1 + photos.length) % photos.length;
+            showSlide(currentIndex);
+        }
+
+        function startAutoPlay() {
+            if (autoPlayInterval) clearInterval(autoPlayInterval);
+            autoPlayInterval = setInterval(() => {
+                if (!isPaused) {
+                    nextPhoto();
+                }
+            }, SLIDE_DURATION);
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const button = event.target;
+            button.textContent = isPaused ? '▶ Play' : '⏯ Pause';
+        }
+
+        function updateInfo() {
+            const photo = photos[currentIndex];
+            const info = document.getElementById('info');
+            if (photo) {
+                const title = photo.title || 'Untitled';
+                const camera = photo.camera_make && photo.camera_model
+                    ? \`\${photo.camera_make} \${photo.camera_model}\`
+                    : '';
+                const dateTaken = photo.exif?.dateTaken || '';
+                info.innerHTML = \`
+                    <div><strong>\${title}</strong></div>
+                    \${camera ? \`<div>\${camera}</div>\` : ''}
+                    \${dateTaken ? \`<div>📅 \${dateTaken}</div>\` : ''}
+                    <div>Photo \${currentIndex + 1} of \${photos.length}</div>
+                \`;
+            }
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowRight':
+                case ' ':
+                    nextPhoto();
+                    break;
+                case 'ArrowLeft':
+                    previousPhoto();
+                    break;
+                case 'p':
+                case 'P':
+                    togglePause();
+                    break;
+            }
+        });
+
+        // Show controls on mouse move
+        let hideControlsTimer;
+        document.addEventListener('mousemove', () => {
+            const controls = document.getElementById('controls');
+            const info = document.getElementById('info');
+            controls.classList.add('show');
+            info.classList.add('show');
+
+            clearTimeout(hideControlsTimer);
+            hideControlsTimer = setTimeout(() => {
+                controls.classList.remove('show');
+                info.classList.remove('show');
+            }, 3000);
+        });
+
+        // Start loading photos
+        loadPhotos();
+    </script>
+</body>
+</html>
+    `;
+
+    return new Response(html, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/html',
+            'Cache-Control': 'public, max-age=60'
+        }
+    });
+}
+
 async function handlePhotosRequest(storage, request, db) {
     try {
         const url = new URL(request.url);
         const page = parseInt(url.searchParams.get('page') || '1');
         const limit = parseInt(url.searchParams.get('limit') || '20');
-        
+
         // Validate parameters
         const validPage = Math.max(1, page);
         const validLimit = Math.max(1, Math.min(100, limit)); // Limit between 1-100
-        
+
         // Get photos from database with pagination
         const photoDb = new PhotoDatabase(db);
         const result = await photoDb.listPhotosWithPagination(validPage, validLimit);
-        
+
         return new Response(JSON.stringify(result), {
             headers: {
                 'Content-Type': 'application/json',
